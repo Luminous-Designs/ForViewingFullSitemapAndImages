@@ -21,11 +21,39 @@
             width: 100%;
             height: auto;
             object-fit: contain;
-            max-height: 600px; /* Adjust this value as needed */
+            max-height: 600px;
         }
         .scroll-container {
-            max-height: 600px; /* Adjust this value as needed */
+            max-height: 600px;
             overflow-y: auto;
+        }
+        .floating-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 1001;
+        }
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
         }
     </style>
 </head>
@@ -35,13 +63,39 @@
         <div id="results" class="grid"></div>
     </div>
 
+    <button id="getInfoButton" class="floating-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Get Info
+    </button>
+
+    <div id="popupOverlay" class="popup-overlay"></div>
+    <div id="popup" class="popup">
+        <h2 class="text-xl font-bold mb-4">Project Information</h2>
+        <p id="customCount"></p>
+        <p id="cmsCount"></p>
+        <p id="totalTime"></p>
+        <button id="closePopup" class="mt-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+            Close
+        </button>
+    </div>
+
     <script>
+        let crawlData = [];
+        const crawlId = new URLSearchParams(window.location.search).get('crawlId');
+
         async function loadResults() {
-            const response = await fetch('/results.json');
-            const results = await response.json();
+            let response;
+            if (crawlId) {
+                response = await fetch(`/results/${crawlId}`);
+            } else {
+                response = await fetch('/results.json');
+            }
+            crawlData = await response.json();
             const resultsContainer = document.getElementById('results');
 
-            results.forEach(page => {
+            // Load saved page types
+            const savedPageTypes = JSON.parse(localStorage.getItem(`pageTypes_${crawlId}`) || '{}');
+
+            crawlData.forEach((page, index) => {
                 const box = document.createElement('div');
                 box.className = 'box bg-white rounded-lg shadow-md overflow-hidden';
                 box.innerHTML = `
@@ -69,13 +123,78 @@
                             </details>
                         </div>
                     </div>
+                    <div class="p-4 bg-gray-100">
+                        <p class="font-semibold mb-2">Page Type:</p>
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${savedPageTypes[page.url] === 'custom' ? 'checked' : ''}>
+                            <span class="ml-2">Custom</span>
+                        </label>
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${savedPageTypes[page.url] === 'cms' ? 'checked' : ''}>
+                            <span class="ml-2">CMS</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" class="form-radio" name="pageType${index}" value="na" data-index="${index}" ${!savedPageTypes[page.url] || savedPageTypes[page.url] === 'na' ? 'checked' : ''}>
+                            <span class="ml-2">N/A</span>
+                        </label>
+                    </div>
                     <a href="${page.url}" target="_blank" class="block bg-indigo-600 text-white py-2 px-4 text-center hover:bg-indigo-700 transition duration-300">Visit Page</a>
                 `;
                 resultsContainer.appendChild(box);
             });
+
+            // Add event listeners for radio buttons
+            document.querySelectorAll('input[type="radio"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const index = e.target.dataset.index;
+                    const value = e.target.value;
+                    const url = crawlData[index].url;
+                    savedPageTypes[url] = value;
+                    localStorage.setItem(`pageTypes_${crawlId}`, JSON.stringify(savedPageTypes));
+                });
+            });
         }
 
         loadResults();
+
+        // Get Info functionality
+        const getInfoButton = document.getElementById('getInfoButton');
+        const popup = document.getElementById('popup');
+        const popupOverlay = document.getElementById('popupOverlay');
+        const closePopup = document.getElementById('closePopup');
+
+        getInfoButton.addEventListener('click', () => {
+            let customCount = 0;
+            let cmsCount = 0;
+
+            const savedPageTypes = JSON.parse(localStorage.getItem(`pageTypes_${crawlId}`) || '{}');
+
+            Object.values(savedPageTypes).forEach(pageType => {
+                if (pageType === 'custom') customCount++;
+                if (pageType === 'cms') cmsCount++;
+            });
+
+            const totalMinutes = (customCount * 30) + (cmsCount * 10);
+            const totalHours = (totalMinutes / 60).toFixed(2);
+
+            document.getElementById('customCount').textContent = `Custom pages: ${customCount}`;
+            document.getElementById('cmsCount').textContent = `CMS pages: ${cmsCount}`;
+            document.getElementById('totalTime').textContent = `Estimated time: ${totalHours} hours`;
+
+            popup.style.display = 'block';
+            popupOverlay.style.display = 'block';
+            popup.classList.add('animate-fade-in-down');
+        });
+
+        closePopup.addEventListener('click', () => {
+            popup.style.display = 'none';
+            popupOverlay.style.display = 'none';
+        });
+
+        popupOverlay.addEventListener('click', () => {
+            popup.style.display = 'none';
+            popupOverlay.style.display = 'none';
+        });
     </script>
 </body>
 </html>

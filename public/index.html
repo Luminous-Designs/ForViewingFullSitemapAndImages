@@ -6,40 +6,41 @@
     <title>Sitemap Processor</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">Sitemap Processor</h1>
-        <form id="sitemapForm" class="space-y-4">
-            <div>
-                <label for="sitemapUrl" class="block text-sm font-medium text-gray-700">Sitemap URL</label>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-3xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processor</h1>
+        <form id="sitemapForm" class="mb-8">
+            <div class="flex items-center border-b border-b-2 border-blue-500 py-2">
                 <input type="text" id="sitemapUrl" placeholder="Enter sitemap URL" required
-                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                       class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none">
+                <button type="submit"
+                        class="flex-shrink-0 bg-blue-500 hover:bg-blue-700 border-blue-500 hover:border-blue-700 text-sm border-4 text-white py-1 px-2 rounded">
+                    Process Sitemap
+                </button>
             </div>
-            <button type="submit"
-                    class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                Process Sitemap
-            </button>
         </form>
-        <div id="progressContainer" class="mt-6 hidden">
+        <div id="progressContainer" class="mb-8 hidden">
             <div class="relative pt-1">
                 <div class="flex mb-2 items-center justify-between">
                     <div>
-                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-200">
+                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
                             Progress
                         </span>
                     </div>
                     <div class="text-right">
-                        <span id="progressPercentage" class="text-xs font-semibold inline-block text-indigo-600">
+                        <span id="progressPercentage" class="text-xs font-semibold inline-block text-blue-600">
                             0%
                         </span>
                     </div>
                 </div>
-                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-200">
-                    <div id="progressBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500" style="width: 0%"></div>
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
+                    <div id="progressBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500" style="width: 0%"></div>
                 </div>
             </div>
         </div>
-        <div id="result" class="mt-6 text-center"></div>
+        <div id="result" class="mb-8 text-center"></div>
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Previous Crawls</h2>
+        <div id="previousCrawls" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
     </div>
 
     <script>
@@ -48,27 +49,43 @@
         const progressBar = document.getElementById('progressBar');
         const progressPercentage = document.getElementById('progressPercentage');
         const result = document.getElementById('result');
+        const previousCrawls = document.getElementById('previousCrawls');
 
         let ws;
+
+        function loadPreviousCrawls() {
+            const crawls = JSON.parse(localStorage.getItem('crawls') || '[]');
+            previousCrawls.innerHTML = '';
+            crawls.forEach(crawl => {
+                const crawlElement = document.createElement('div');
+                crawlElement.className = 'bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow duration-300';
+                crawlElement.innerHTML = `
+                    <h3 class="text-lg font-semibold mb-2">${new URL(crawl.url).hostname}</h3>
+                    <p class="text-sm text-gray-600">${new Date(crawl.date).toLocaleString()}</p>
+                `;
+                crawlElement.addEventListener('click', () => {
+                    window.location.href = `/results.html?crawlId=${crawl.id}`;
+                });
+                previousCrawls.appendChild(crawlElement);
+            });
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const sitemapUrl = document.getElementById('sitemapUrl').value;
 
-            // Show progress container and reset progress
             progressContainer.classList.remove('hidden');
             progressBar.style.width = '0%';
             progressPercentage.textContent = '0%';
             result.innerHTML = '';
 
-            // Send request to server
-            await fetch('/process-sitemap', {
+            const response = await fetch('/process-sitemap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sitemapUrl })
             });
+            const { crawlId } = await response.json();
 
-            // Connect to WebSocket for progress updates
             ws = new WebSocket(`ws://${window.location.host}`);
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -76,11 +93,19 @@
                     progressBar.style.width = `${data.progress}%`;
                     progressPercentage.textContent = `${data.progress}%`;
                 } else if (data.type === 'complete') {
-                    result.innerHTML = `<a href="${data.resultsUrl}" class="text-indigo-600 hover:text-indigo-800">View Results</a>`;
+                    result.innerHTML = `<a href="${data.resultsUrl}" class="text-blue-600 hover:text-blue-800">View Results</a>`;
                     ws.close();
+                    
+                    // Save the crawl to localStorage
+                    const crawls = JSON.parse(localStorage.getItem('crawls') || '[]');
+                    crawls.unshift({ id: crawlId, url: sitemapUrl, date: new Date().toISOString() });
+                    localStorage.setItem('crawls', JSON.stringify(crawls.slice(0, 10))); // Keep only the last 10 crawls
+                    loadPreviousCrawls();
                 }
             };
         });
+
+        loadPreviousCrawls();
     </script>
 </body>
 </html>
