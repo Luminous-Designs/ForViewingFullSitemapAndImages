@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sitemap Processing Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
+        <div id="results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+    </div>
+
+    <script>
+        async function loadResults() {
+            const response = await fetch('/results.json');
+            const results = await response.json();
+            const resultsContainer = document.getElementById('results');
+
+            results.forEach(page => {
+                const box = document.createElement('div');
+                box.className = 'bg-white rounded-lg shadow-md overflow-hidden';
+                box.innerHTML = `
+                    <img src="${page.screenshotPath}" alt="${page.title}" class="w-full h-48 object-cover">
+                    <div class="p-6 space-y-4">
+                        <h2 class="text-xl font-semibold text-gray-800">${page.title}</h2>
+                        <div class="space-y-2">
+                            <p class="text-sm text-gray-600"><span class="font-semibold">URL:</span> ${page.url}</p>
+                            <p class="text-sm text-gray-600"><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
+                            <p class="text-sm text-gray-600"><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
+                            <p class="text-sm text-gray-600"><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
+                            <p class="text-sm text-gray-600"><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
+                            <details class="text-sm text-gray-600">
+                                <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
+                                <p><span class="font-semibold">Title:</span> ${page.ogTitle || 'N/A'}</p>
+                                <p><span class="font-semibold">Description:</span> ${page.ogDescription || 'N/A'}</p>
+                                <p><span class="font-semibold">Image:</span> ${page.ogImage || 'N/A'}</p>
+                            </details>
+                            <details class="text-sm text-gray-600">
+                                <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
+                                <p><span class="font-semibold">Card:</span> ${page.twitterCard || 'N/A'}</p>
+                                <p><span class="font-semibold">Title:</span> ${page.twitterTitle || 'N/A'}</p>
+                                <p><span class="font-semibold">Description:</span> ${page.twitterDescription || 'N/A'}</p>
+                                <p><span class="font-semibold">Image:</span> ${page.twitterImage || 'N/A'}</p>
+                            </details>
+                        </div>
+                        <a href="${page.url}" target="_blank" class="inline-block bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700 transition duration-300">Visit Page</a>
+                    </div>
+                `;
+                resultsContainer.appendChild(box);
+            });
+        }
+
+        loadResults();
+    </script>
+</body>
+</html>
