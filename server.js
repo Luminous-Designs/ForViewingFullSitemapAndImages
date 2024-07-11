@@ -6,6 +6,7 @@ const path = require('path');
 const xml2js = require('xml2js');
 const express = require('express');
 const WebSocket = require('ws');
+const crypto = require('crypto');
 
 const app = express();
 const port = 3000;
@@ -15,7 +16,11 @@ app.use(express.json());
 
 const wss = new WebSocket.Server({ noServer: true });
 
-// New function to clear the screenshots folder
+// Function to generate a safe filename
+function generateSafeFilename(url) {
+  return crypto.createHash('md5').update(url).digest('hex') + '.png';
+}
+
 async function clearScreenshotsFolder() {
   const directory = 'public/screenshots';
   try {
@@ -75,13 +80,14 @@ async function extractSEOData(url) {
 }
 
 async function processUrl(url, index, total) {
-  const screenshotPath = `public/screenshots/${encodeURIComponent(url)}.png`;
+  const filename = generateSafeFilename(url);
+  const screenshotPath = path.join('public', 'screenshots', filename);
   await captureScreenshot(url, screenshotPath);
   const seoData = await extractSEOData(url);
   
   return { 
     ...seoData, 
-    screenshotPath: screenshotPath.replace('public/', '') 
+    screenshotPath: `/screenshots/${filename}` 
   };
 }
 

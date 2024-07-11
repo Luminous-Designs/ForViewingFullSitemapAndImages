@@ -5,11 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sitemap Processing Results</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+        }
+        .box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .box img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            max-height: 600px; /* Adjust this value as needed */
+        }
+        .scroll-container {
+            max-height: 600px; /* Adjust this value as needed */
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-8">
-    <div class="max-w-7xl mx-auto">
+    <div class="max-w-full mx-auto">
         <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
-        <div id="results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"></div>
+        <div id="results" class="grid"></div>
     </div>
 
     <script>
@@ -20,24 +43,24 @@
 
             results.forEach(page => {
                 const box = document.createElement('div');
-                box.className = 'bg-white rounded-lg shadow-md overflow-hidden';
+                box.className = 'box bg-white rounded-lg shadow-md overflow-hidden';
                 box.innerHTML = `
-                    <img src="${page.screenshotPath}" alt="${page.title}" class="w-full h-48 object-cover">
-                    <div class="p-6 space-y-4">
-                        <h2 class="text-xl font-semibold text-gray-800">${page.title}</h2>
-                        <div class="space-y-2">
-                            <p class="text-sm text-gray-600"><span class="font-semibold">URL:</span> ${page.url}</p>
-                            <p class="text-sm text-gray-600"><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
-                            <p class="text-sm text-gray-600"><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
-                            <p class="text-sm text-gray-600"><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
-                            <p class="text-sm text-gray-600"><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
-                            <details class="text-sm text-gray-600">
+                    <img src="${page.screenshotPath}" alt="${page.title}" class="mb-4">
+                    <div class="scroll-container p-4">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
+                        <div class="space-y-2 text-sm text-gray-600">
+                            <p><span class="font-semibold">URL:</span> ${page.url}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
+                            <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
+                            <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
+                            <p><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
+                            <details>
                                 <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
                                 <p><span class="font-semibold">Title:</span> ${page.ogTitle || 'N/A'}</p>
                                 <p><span class="font-semibold">Description:</span> ${page.ogDescription || 'N/A'}</p>
                                 <p><span class="font-semibold">Image:</span> ${page.ogImage || 'N/A'}</p>
                             </details>
-                            <details class="text-sm text-gray-600">
+                            <details>
                                 <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
                                 <p><span class="font-semibold">Card:</span> ${page.twitterCard || 'N/A'}</p>
                                 <p><span class="font-semibold">Title:</span> ${page.twitterTitle || 'N/A'}</p>
@@ -45,8 +68,8 @@
                                 <p><span class="font-semibold">Image:</span> ${page.twitterImage || 'N/A'}</p>
                             </details>
                         </div>
-                        <a href="${page.url}" target="_blank" class="inline-block bg-indigo-600 text-white py-2 px-4 rounded hover:bg-indigo-700 transition duration-300">Visit Page</a>
                     </div>
+                    <a href="${page.url}" target="_blank" class="block bg-indigo-600 text-white py-2 px-4 text-center hover:bg-indigo-700 transition duration-300">Visit Page</a>
                 `;
                 resultsContainer.appendChild(box);
             });
