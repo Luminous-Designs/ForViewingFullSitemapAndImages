@@ -8,14 +8,15 @@
     <style>
         .grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
         }
         .box {
-            border: 1px solid #ccc;
-            padding: 10px;
             display: flex;
             flex-direction: column;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            overflow: hidden;
         }
         .box img {
             width: 100%;
@@ -24,35 +25,41 @@
             max-height: 600px;
         }
         .scroll-container {
-            max-height: 600px;
+            flex-grow: 1;
             overflow-y: auto;
+            padding: 1rem;
+            max-height: 300px;
         }
-        .floating-button {
+        .page-type {
+            padding: 0.5rem 1rem;
+            background-color: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+        .visit-link {
+            padding: 0.5rem;
+            text-align: center;
+            background-color: #4a5568;
+            color: white;
+            text-decoration: none;
+        }
+        .visit-link:hover {
+            background-color: #2d3748;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #4a5568;
+        }
+        .divider {
+            margin: 2rem 0;
+            border-top: 2px solid #e2e8f0;
+        }
+        #organizeButton {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            z-index: 1000;
-        }
-        .popup {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            z-index: 1001;
-        }
-        .popup-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
             z-index: 1000;
         }
     </style>
@@ -60,27 +67,18 @@
 <body class="bg-gray-100 min-h-screen p-8">
     <div class="max-w-full mx-auto">
         <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
-        <div id="results" class="grid"></div>
+        <div id="results" class="mb-8"></div>
     </div>
 
-    <button id="getInfoButton" class="floating-button bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-        Get Info
+    <button id="organizeButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Organize
     </button>
-
-    <div id="popupOverlay" class="popup-overlay"></div>
-    <div id="popup" class="popup">
-        <h2 class="text-xl font-bold mb-4">Project Information</h2>
-        <p id="customCount"></p>
-        <p id="cmsCount"></p>
-        <p id="totalTime"></p>
-        <button id="closePopup" class="mt-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-            Close
-        </button>
-    </div>
 
     <script>
         let crawlData = [];
         const crawlId = new URLSearchParams(window.location.search).get('crawlId');
+        const resultsContainer = document.getElementById('results');
+        const organizeButton = document.getElementById('organizeButton');
 
         async function loadResults() {
             let response;
@@ -90,111 +88,108 @@
                 response = await fetch('/results.json');
             }
             crawlData = await response.json();
-            const resultsContainer = document.getElementById('results');
-
-            // Load saved page types
-            const savedPageTypes = JSON.parse(localStorage.getItem(`pageTypes_${crawlId}`) || '{}');
-
-            crawlData.forEach((page, index) => {
-                const box = document.createElement('div');
-                box.className = 'box bg-white rounded-lg shadow-md overflow-hidden';
-                box.innerHTML = `
-                    <img src="${page.screenshotPath}" alt="${page.title}" class="mb-4">
-                    <div class="scroll-container p-4">
-                        <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
-                        <div class="space-y-2 text-sm text-gray-600">
-                            <p><span class="font-semibold">URL:</span> ${page.url}</p>
-                            <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
-                            <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
-                            <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
-                            <p><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
-                            <details>
-                                <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
-                                <p><span class="font-semibold">Title:</span> ${page.ogTitle || 'N/A'}</p>
-                                <p><span class="font-semibold">Description:</span> ${page.ogDescription || 'N/A'}</p>
-                                <p><span class="font-semibold">Image:</span> ${page.ogImage || 'N/A'}</p>
-                            </details>
-                            <details>
-                                <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
-                                <p><span class="font-semibold">Card:</span> ${page.twitterCard || 'N/A'}</p>
-                                <p><span class="font-semibold">Title:</span> ${page.twitterTitle || 'N/A'}</p>
-                                <p><span class="font-semibold">Description:</span> ${page.twitterDescription || 'N/A'}</p>
-                                <p><span class="font-semibold">Image:</span> ${page.twitterImage || 'N/A'}</p>
-                            </details>
-                        </div>
-                    </div>
-                    <div class="p-4 bg-gray-100">
-                        <p class="font-semibold mb-2">Page Type:</p>
-                        <label class="inline-flex items-center mr-4">
-                            <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${savedPageTypes[page.url] === 'custom' ? 'checked' : ''}>
-                            <span class="ml-2">Custom</span>
-                        </label>
-                        <label class="inline-flex items-center mr-4">
-                            <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${savedPageTypes[page.url] === 'cms' ? 'checked' : ''}>
-                            <span class="ml-2">CMS</span>
-                        </label>
-                        <label class="inline-flex items-center">
-                            <input type="radio" class="form-radio" name="pageType${index}" value="na" data-index="${index}" ${!savedPageTypes[page.url] || savedPageTypes[page.url] === 'na' ? 'checked' : ''}>
-                            <span class="ml-2">N/A</span>
-                        </label>
-                    </div>
-                    <a href="${page.url}" target="_blank" class="block bg-indigo-600 text-white py-2 px-4 text-center hover:bg-indigo-700 transition duration-300">Visit Page</a>
-                `;
-                resultsContainer.appendChild(box);
-            });
-
-            // Add event listeners for radio buttons
-            document.querySelectorAll('input[type="radio"]').forEach(radio => {
-                radio.addEventListener('change', (e) => {
-                    const index = e.target.dataset.index;
-                    const value = e.target.value;
-                    const url = crawlData[index].url;
-                    savedPageTypes[url] = value;
-                    localStorage.setItem(`pageTypes_${crawlId}`, JSON.stringify(savedPageTypes));
-                });
-            });
+            crawlData.forEach(page => page.pageType = 'cms'); // Set default to CMS
+            displayResults(crawlData);
         }
 
+        function displayResults(data, organized = false) {
+            resultsContainer.innerHTML = '';
+            if (organized) {
+                const customPages = data.filter(page => page.pageType === 'custom');
+                const cmsPages = data.filter(page => page.pageType === 'cms');
+
+                if (customPages.length > 0) {
+                    const customSection = createSection('Custom Pages', customPages);
+                    resultsContainer.appendChild(customSection);
+                }
+
+                if (customPages.length > 0 && cmsPages.length > 0) {
+                    const divider = document.createElement('hr');
+                    divider.className = 'divider';
+                    resultsContainer.appendChild(divider);
+                }
+
+                if (cmsPages.length > 0) {
+                    const cmsSection = createSection('CMS Pages', cmsPages);
+                    resultsContainer.appendChild(cmsSection);
+                }
+            } else {
+                const section = createSection('All Pages', data);
+                resultsContainer.appendChild(section);
+            }
+        }
+
+        function createSection(title, pages) {
+            const section = document.createElement('div');
+            section.className = 'mb-8';
+            section.innerHTML = `
+                <h2 class="section-title">${title}</h2>
+                <div class="grid">
+                    ${pages.map((page, index) => createResultBox(page, crawlData.indexOf(page)).outerHTML).join('')}
+                </div>
+            `;
+            return section;
+        }
+
+        function createResultBox(page, index) {
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.innerHTML = `
+                <img src="${page.screenshotPath}" alt="${page.title}" loading="lazy">
+                <div class="scroll-container">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
+                    <div class="space-y-2 text-sm text-gray-600">
+                        <p><span class="font-semibold">URL:</span> ${page.url}</p>
+                        <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
+                        <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
+                        <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
+                        <p><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
+                        <details>
+                            <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
+                            <p><span class="font-semibold">Title:</span> ${page.ogTitle || 'N/A'}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.ogDescription || 'N/A'}</p>
+                            <p><span class="font-semibold">Image:</span> ${page.ogImage || 'N/A'}</p>
+                        </details>
+                        <details>
+                            <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
+                            <p><span class="font-semibold">Card:</span> ${page.twitterCard || 'N/A'}</p>
+                            <p><span class="font-semibold">Title:</span> ${page.twitterTitle || 'N/A'}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.twitterDescription || 'N/A'}</p>
+                            <p><span class="font-semibold">Image:</span> ${page.twitterImage || 'N/A'}</p>
+                        </details>
+                    </div>
+                </div>
+                <div class="page-type">
+                    <p class="font-semibold mb-2">Page Type:</p>
+                    <label class="inline-flex items-center mr-4">
+                        <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${page.pageType === 'custom' ? 'checked' : ''}>
+                        <span class="ml-2">Custom</span>
+                    </label>
+                    <label class="inline-flex items-center mr-4">
+                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.pageType === 'cms' ? 'checked' : ''}>
+                        <span class="ml-2">CMS</span>
+                    </label>
+                </div>
+                <a href="${page.url}" target="_blank" class="visit-link">Visit Page</a>
+            `;
+            return box;
+        }
+
+        function organizeResults() {
+            displayResults(crawlData, true);
+        }
+
+        document.addEventListener('change', (e) => {
+            if (e.target.type === 'radio') {
+                const index = parseInt(e.target.dataset.index);
+                const value = e.target.value;
+                crawlData[index].pageType = value;
+            }
+        });
+
+        organizeButton.addEventListener('click', organizeResults);
+
         loadResults();
-
-        // Get Info functionality
-        const getInfoButton = document.getElementById('getInfoButton');
-        const popup = document.getElementById('popup');
-        const popupOverlay = document.getElementById('popupOverlay');
-        const closePopup = document.getElementById('closePopup');
-
-        getInfoButton.addEventListener('click', () => {
-            let customCount = 0;
-            let cmsCount = 0;
-
-            const savedPageTypes = JSON.parse(localStorage.getItem(`pageTypes_${crawlId}`) || '{}');
-
-            Object.values(savedPageTypes).forEach(pageType => {
-                if (pageType === 'custom') customCount++;
-                if (pageType === 'cms') cmsCount++;
-            });
-
-            const totalMinutes = (customCount * 30) + (cmsCount * 10);
-            const totalHours = (totalMinutes / 60).toFixed(2);
-
-            document.getElementById('customCount').textContent = `Custom pages: ${customCount}`;
-            document.getElementById('cmsCount').textContent = `CMS pages: ${cmsCount}`;
-            document.getElementById('totalTime').textContent = `Estimated time: ${totalHours} hours`;
-
-            popup.style.display = 'block';
-            popupOverlay.style.display = 'block';
-            popup.classList.add('animate-fade-in-down');
-        });
-
-        closePopup.addEventListener('click', () => {
-            popup.style.display = 'none';
-            popupOverlay.style.display = 'none';
-        });
-
-        popupOverlay.addEventListener('click', () => {
-            popup.style.display = 'none';
-            popupOverlay.style.display = 'none';
-        });
     </script>
 </body>
 </html>
