@@ -88,15 +88,14 @@
                 response = await fetch('/results.json');
             }
             crawlData = await response.json();
-            crawlData.forEach(page => page.pageType = 'cms'); // Set default to CMS
             displayResults(crawlData);
         }
 
         function displayResults(data, organized = false) {
             resultsContainer.innerHTML = '';
             if (organized) {
-                const customPages = data.filter(page => page.pageType === 'custom');
-                const cmsPages = data.filter(page => page.pageType === 'cms');
+                const customPages = data.filter(page => page.page_type === 'custom');
+                const cmsPages = data.filter(page => page.page_type === 'cms');
 
                 if (customPages.length > 0) {
                     const customSection = createSection('Custom Pages', customPages);
@@ -135,7 +134,7 @@
             const box = document.createElement('div');
             box.className = 'box';
             box.innerHTML = `
-                <img src="${page.screenshotPath}" alt="${page.title}" loading="lazy">
+                <img src="${page.screenshot_path}" alt="${page.title}" loading="lazy">
                 <div class="scroll-container">
                     <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
                     <div class="space-y-2 text-sm text-gray-600">
@@ -143,30 +142,30 @@
                         <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
                         <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
                         <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
-                        <p><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
+                        <p><span class="font-semibold">Canonical URL:</span> ${page.canonical_url || 'N/A'}</p>
                         <details>
                             <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
-                            <p><span class="font-semibold">Title:</span> ${page.ogTitle || 'N/A'}</p>
-                            <p><span class="font-semibold">Description:</span> ${page.ogDescription || 'N/A'}</p>
-                            <p><span class="font-semibold">Image:</span> ${page.ogImage || 'N/A'}</p>
+                            <p><span class="font-semibold">Title:</span> ${page.og_title || 'N/A'}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.og_description || 'N/A'}</p>
+                            <p><span class="font-semibold">Image:</span> ${page.og_image || 'N/A'}</p>
                         </details>
                         <details>
                             <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
-                            <p><span class="font-semibold">Card:</span> ${page.twitterCard || 'N/A'}</p>
-                            <p><span class="font-semibold">Title:</span> ${page.twitterTitle || 'N/A'}</p>
-                            <p><span class="font-semibold">Description:</span> ${page.twitterDescription || 'N/A'}</p>
-                            <p><span class="font-semibold">Image:</span> ${page.twitterImage || 'N/A'}</p>
+                            <p><span class="font-semibold">Card:</span> ${page.twitter_card || 'N/A'}</p>
+                            <p><span class="font-semibold">Title:</span> ${page.twitter_title || 'N/A'}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.twitter_description || 'N/A'}</p>
+                            <p><span class="font-semibold">Image:</span> ${page.twitter_image || 'N/A'}</p>
                         </details>
                     </div>
                 </div>
                 <div class="page-type">
                     <p class="font-semibold mb-2">Page Type:</p>
                     <label class="inline-flex items-center mr-4">
-                        <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${page.pageType === 'custom' ? 'checked' : ''}>
+                        <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${page.page_type === 'custom' ? 'checked' : ''}>
                         <span class="ml-2">Custom</span>
                     </label>
                     <label class="inline-flex items-center mr-4">
-                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.pageType === 'cms' ? 'checked' : ''}>
+                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.page_type === 'cms' ? 'checked' : ''}>
                         <span class="ml-2">CMS</span>
                     </label>
                 </div>
@@ -179,11 +178,24 @@
             displayResults(crawlData, true);
         }
 
-        document.addEventListener('change', (e) => {
+        document.addEventListener('change', async (e) => {
             if (e.target.type === 'radio') {
                 const index = parseInt(e.target.dataset.index);
                 const value = e.target.value;
-                crawlData[index].pageType = value;
+                crawlData[index].page_type = value;
+
+                // Send update to server
+                await fetch('/update-page-type', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        crawlId: crawlId,
+                        url: crawlData[index].url,
+                        pageType: value
+                    }),
+                });
             }
         });
 

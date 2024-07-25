@@ -50,11 +50,12 @@
         const progressPercentage = document.getElementById('progressPercentage');
         const result = document.getElementById('result');
         const previousCrawls = document.getElementById('previousCrawls');
-
+    
         let ws;
-
-        function loadPreviousCrawls() {
-            const crawls = JSON.parse(localStorage.getItem('crawls') || '[]');
+    
+        async function loadPreviousCrawls() {
+            const response = await fetch('/previous-crawls');
+            const crawls = await response.json();
             previousCrawls.innerHTML = '';
             crawls.forEach(crawl => {
                 const crawlElement = document.createElement('div');
@@ -69,23 +70,23 @@
                 previousCrawls.appendChild(crawlElement);
             });
         }
-
+    
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const sitemapUrl = document.getElementById('sitemapUrl').value;
-
+    
             progressContainer.classList.remove('hidden');
             progressBar.style.width = '0%';
             progressPercentage.textContent = '0%';
             result.innerHTML = '';
-
+    
             const response = await fetch('/process-sitemap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sitemapUrl })
             });
             const { crawlId } = await response.json();
-
+    
             ws = new WebSocket(`ws://${window.location.host}`);
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -95,16 +96,11 @@
                 } else if (data.type === 'complete') {
                     result.innerHTML = `<a href="${data.resultsUrl}" class="text-blue-600 hover:text-blue-800">View Results</a>`;
                     ws.close();
-                    
-                    // Save the crawl to localStorage
-                    const crawls = JSON.parse(localStorage.getItem('crawls') || '[]');
-                    crawls.unshift({ id: crawlId, url: sitemapUrl, date: new Date().toISOString() });
-                    localStorage.setItem('crawls', JSON.stringify(crawls.slice(0, 10))); // Keep only the last 10 crawls
                     loadPreviousCrawls();
                 }
             };
         });
-
+    
         loadPreviousCrawls();
     </script>
 </body>

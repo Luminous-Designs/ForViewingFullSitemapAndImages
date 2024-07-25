@@ -1,0 +1,1125 @@
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/PUBLIC/INDEX.HTML CODE IS BELOW
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sitemap Processor</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-3xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processor</h1>
+        <form id="sitemapForm" class="mb-8">
+            <div class="flex items-center border-b border-b-2 border-blue-500 py-2">
+                <input type="text" id="sitemapUrl" placeholder="Enter sitemap URL" required
+                       class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none">
+                <button type="submit"
+                        class="flex-shrink-0 bg-blue-500 hover:bg-blue-700 border-blue-500 hover:border-blue-700 text-sm border-4 text-white py-1 px-2 rounded">
+                    Process Sitemap
+                </button>
+            </div>
+        </form>
+        <div id="progressContainer" class="mb-8 hidden">
+            <div class="relative pt-1">
+                <div class="flex mb-2 items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
+                            Progress
+                        </span>
+                    </div>
+                    <div class="text-right">
+                        <span id="progressPercentage" class="text-xs font-semibold inline-block text-blue-600">
+                            0%
+                        </span>
+                    </div>
+                </div>
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
+                    <div id="progressBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        <div id="result" class="mb-8 text-center"></div>
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Previous Crawls</h2>
+        <div id="previousCrawls" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('sitemapForm');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const result = document.getElementById('result');
+        const previousCrawls = document.getElementById('previousCrawls');
+
+        let ws;
+
+        function loadPreviousCrawls() {
+            const crawls = JSON.parse(localStorage.getItem('crawls') || '[]');
+            previousCrawls.innerHTML = '';
+            crawls.forEach(crawl => {
+                const crawlElement = document.createElement('div');
+                crawlElement.className = 'bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow duration-300';
+                crawlElement.innerHTML = `
+                    <h3 class="text-lg font-semibold mb-2">${new URL(crawl.url).hostname}</h3>
+                    <p class="text-sm text-gray-600">${new Date(crawl.date).toLocaleString()}</p>
+                `;
+                crawlElement.addEventListener('click', () => {
+                    window.location.href = `/results.html?crawlId=${crawl.id}`;
+                });
+                previousCrawls.appendChild(crawlElement);
+            });
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const sitemapUrl = document.getElementById('sitemapUrl').value;
+
+            progressContainer.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            progressPercentage.textContent = '0%';
+            result.innerHTML = '';
+
+            const response = await fetch('/process-sitemap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sitemapUrl })
+            });
+            const { crawlId } = await response.json();
+
+            ws = new WebSocket(`ws://${window.location.host}`);
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'progress') {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressPercentage.textContent = `${data.progress}%`;
+                } else if (data.type === 'complete') {
+                    result.innerHTML = `<a href="${data.resultsUrl}" class="text-blue-600 hover:text-blue-800">View Results</a>`;
+                    ws.close();
+                    
+                    // Save the crawl to localStorage
+                    const crawls = JSON.parse(localStorage.getItem('crawls') || '[]');
+                    crawls.unshift({ id: crawlId, url: sitemapUrl, date: new Date().toISOString() });
+                    localStorage.setItem('crawls', JSON.stringify(crawls.slice(0, 10))); // Keep only the last 10 crawls
+                    loadPreviousCrawls();
+                }
+            };
+        });
+
+        loadPreviousCrawls();
+    </script>
+</body>
+</html>
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/PUBLIC/RESULTS.HTML CODE IS BELOW
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sitemap Processing Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .box {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .box img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            max-height: 600px;
+        }
+        .scroll-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            max-height: 300px;
+        }
+        .page-type {
+            padding: 0.5rem 1rem;
+            background-color: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+        .visit-link {
+            padding: 0.5rem;
+            text-align: center;
+            background-color: #4a5568;
+            color: white;
+            text-decoration: none;
+        }
+        .visit-link:hover {
+            background-color: #2d3748;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #4a5568;
+        }
+        .divider {
+            margin: 2rem 0;
+            border-top: 2px solid #e2e8f0;
+        }
+        #organizeButton {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-full mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
+        <div id="results" class="mb-8"></div>
+    </div>
+
+    <button id="organizeButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        Organize
+    </button>
+
+    <script>
+        let crawlData = [];
+        const crawlId = new URLSearchParams(window.location.search).get('crawlId');
+        const resultsContainer = document.getElementById('results');
+        const organizeButton = document.getElementById('organizeButton');
+
+        async function loadResults() {
+            let response;
+            if (crawlId) {
+                response = await fetch(`/results/${crawlId}`);
+            } else {
+                response = await fetch('/results.json');
+            }
+            crawlData = await response.json();
+            crawlData.forEach(page => page.pageType = 'cms'); // Set default to CMS
+            displayResults(crawlData);
+        }
+
+        function displayResults(data, organized = false) {
+            resultsContainer.innerHTML = '';
+            if (organized) {
+                const customPages = data.filter(page => page.pageType === 'custom');
+                const cmsPages = data.filter(page => page.pageType === 'cms');
+
+                if (customPages.length > 0) {
+                    const customSection = createSection('Custom Pages', customPages);
+                    resultsContainer.appendChild(customSection);
+                }
+
+                if (customPages.length > 0 && cmsPages.length > 0) {
+                    const divider = document.createElement('hr');
+                    divider.className = 'divider';
+                    resultsContainer.appendChild(divider);
+                }
+
+                if (cmsPages.length > 0) {
+                    const cmsSection = createSection('CMS Pages', cmsPages);
+                    resultsContainer.appendChild(cmsSection);
+                }
+            } else {
+                const section = createSection('All Pages', data);
+                resultsContainer.appendChild(section);
+            }
+        }
+
+        function createSection(title, pages) {
+            const section = document.createElement('div');
+            section.className = 'mb-8';
+            section.innerHTML = `
+                <h2 class="section-title">${title}</h2>
+                <div class="grid">
+                    ${pages.map((page, index) => createResultBox(page, crawlData.indexOf(page)).outerHTML).join('')}
+                </div>
+            `;
+            return section;
+        }
+
+        function createResultBox(page, index) {
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.innerHTML = `
+                <img src="${page.screenshotPath}" alt="${page.title}" loading="lazy">
+                <div class="scroll-container">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
+                    <div class="space-y-2 text-sm text-gray-600">
+                        <p><span class="font-semibold">URL:</span> ${page.url}</p>
+                        <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
+                        <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
+                        <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
+                        <p><span class="font-semibold">Canonical URL:</span> ${page.canonicalUrl || 'N/A'}</p>
+                        <details>
+                            <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
+                            <p><span class="font-semibold">Title:</span> ${page.ogTitle || 'N/A'}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.ogDescription || 'N/A'}</p>
+                            <p><span class="font-semibold">Image:</span> ${page.ogImage || 'N/A'}</p>
+                        </details>
+                        <details>
+                            <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
+                            <p><span class="font-semibold">Card:</span> ${page.twitterCard || 'N/A'}</p>
+                            <p><span class="font-semibold">Title:</span> ${page.twitterTitle || 'N/A'}</p>
+                            <p><span class="font-semibold">Description:</span> ${page.twitterDescription || 'N/A'}</p>
+                            <p><span class="font-semibold">Image:</span> ${page.twitterImage || 'N/A'}</p>
+                        </details>
+                    </div>
+                </div>
+                <div class="page-type">
+                    <p class="font-semibold mb-2">Page Type:</p>
+                    <label class="inline-flex items-center mr-4">
+                        <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${page.pageType === 'custom' ? 'checked' : ''}>
+                        <span class="ml-2">Custom</span>
+                    </label>
+                    <label class="inline-flex items-center mr-4">
+                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.pageType === 'cms' ? 'checked' : ''}>
+                        <span class="ml-2">CMS</span>
+                    </label>
+                </div>
+                <a href="${page.url}" target="_blank" class="visit-link">Visit Page</a>
+            `;
+            return box;
+        }
+
+        function organizeResults() {
+            displayResults(crawlData, true);
+        }
+
+        document.addEventListener('change', (e) => {
+            if (e.target.type === 'radio') {
+                const index = parseInt(e.target.dataset.index);
+                const value = e.target.value;
+                crawlData[index].pageType = value;
+            }
+        });
+
+        organizeButton.addEventListener('click', organizeResults);
+
+        loadResults();
+    </script>
+</body>
+</html>
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/PUBLIC/RESULTS.JSON CODE IS BELOW
+[
+  {
+    "url": "\r\n            https://www.luminardigital.com\r\n        ",
+    "title": "Premium Web Design by Luminar Digital",
+    "description": "Luminar Digital is an award-winning digital creative design agency building stunning websites for businesses seeking to upgrade their digital presence.",
+    "h1": "Boost Revenue and Conversions, the Luminar Way.",
+    "ogTitle": "Premium Web Design by Luminar Digital",
+    "ogDescription": "Luminar Digital is an award-winning digital creative design agency building stunning websites for businesses seeking to upgrade their digital presence.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/6a125be4cf1fc07160f6a5c2f858f256.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/ai-business-integration\r\n        ",
+    "title": "Generative AI Integration | Luminar Digital",
+    "description": "Optimize your business processes and reduce operating expenses by integrating advanced generative artificial intelligence into your company.",
+    "h1": "Revolutionize your business‍with artificial intelligence.",
+    "ogTitle": "Generative AI Integration | Luminar Digital",
+    "ogDescription": "Optimize your business processes and reduce operating expenses by integrating advanced generative artificial intelligence into your company.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/0d183e323401457ae98371d7689f0c39.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/conversions-rate-optimization\r\n        ",
+    "title": "Conversions Rate Optimization | Luminar Digital",
+    "description": "Boost your conversions rate with our specialty CRO package, boosting your conversions using our proprietary LuminarFx 360 package.",
+    "h1": "Boost website revenue with our conversions optimization package",
+    "ogTitle": "Conversions Rate Optimization | Luminar Digital",
+    "ogDescription": "Boost your conversions rate with our specialty CRO package, boosting your conversions using our proprietary LuminarFx 360 package.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/ad929e8c08994443d1c53a15f6a0bc97.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/custom-application-development\r\n        ",
+    "title": "Custom Application Development by Luminar Digital",
+    "description": "Seeking custom website applications developed for your business? Discover our rapid custom application development service, building you compliant software.",
+    "h1": "Scalable website applications‍‍tailored to your business.",
+    "ogTitle": "Custom Application Development by Luminar Digital",
+    "ogDescription": "Seeking custom website applications developed for your business? Discover our rapid custom application development service, building you compliant software.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/08e93906a7fc73869285a187d834a87c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/luminar-blog\r\n        ",
+    "title": "Everything Design by Luminar",
+    "description": "Discover our Everything Design by Luminar blog, for everything you need to know regarding web design, web development, and more.",
+    "h1": "Everything Web Design, from Luminar",
+    "ogTitle": "Everything Design by Luminar",
+    "ogDescription": "Discover our Everything Design by Luminar blog, for everything you need to know regarding web design, web development, and more.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/0da9ee98bee0399d592185882514f2b6.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/luminar-careers\r\n        ",
+    "title": "Careers by Luminar",
+    "description": "Interested in joining a dynamic and fast-growing team of professionals? Consider joining Luminar!",
+    "h1": "Join Our Fast-Growing Global Team",
+    "ogTitle": "Careers by Luminar",
+    "ogDescription": "Interested in joining a dynamic and fast-growing team of professionals? Consider joining Luminar!",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/302eef5dccdb2b1e9b2f03197d8a98b2.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/ppc-management\r\n        ",
+    "title": "PPC Management",
+    "description": "Optimize your PPC campaigns with Luminar's data-driven approach.",
+    "h1": "Maximize your marketing impact with expert PPC management",
+    "ogTitle": "PPC Management",
+    "ogDescription": "Optimize your PPC campaigns with Luminar's data-driven approach.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/b3b9b6cda3cca0f96dbd22488b74504c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/search\r\n        ",
+    "title": "Search Results",
+    "h1": "Search results",
+    "ogTitle": "Search Results",
+    "screenshotPath": "/screenshots/ff72e9ae4e4e3afd8eb5e0accb7fe7c3.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/technical-seo-enhancement\r\n        ",
+    "title": "Boost Your Website Traffic and Enhance SEO",
+    "description": "Increase the number of visitors your website receives with our comprehensive on-page technical SEO services, designed to take websites to a whole new level.",
+    "h1": "Boost your website with advanced‍SEO and PageSpeed optimization.",
+    "ogTitle": "Boost Your Website Traffic and Enhance SEO",
+    "ogDescription": "Increase the number of visitors your website receives with our comprehensive on-page technical SEO services, designed to take websites to a whole new level.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/b391188b657ee4d9219679d179f0a794.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/web-design\r\n        ",
+    "title": "Stunning Pixel-Perfect Responsive Web Design",
+    "description": "Seeking to upgrade your digital presence? Our team of award-winning designers and developers craft stunning websites that look amazing and feature next-level performance.",
+    "h1": "We Build Stunning Websites That Boost Revenue",
+    "ogTitle": "Stunning Pixel-Perfect Responsive Web Design",
+    "ogDescription": "Seeking to upgrade your digital presence? Our team of award-winning designers and developers craft stunning websites that look amazing and feature next-level performance.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/3b56fb17fdd7687ed8d748716b1dca43.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/weebly-to-webflow\r\n        ",
+    "title": "Weebly is Going Away | Migrate Your Weebly Site to Webflow",
+    "description": "Weebly is an outdated platform that is entering end-of-life status. Rescue your Weebly website by migrating to Webflow with our MigrationFx platform.",
+    "h1": "Weebly is going away. Boost your website by migrating to Webflow.",
+    "ogTitle": "Weebly is Going Away | Migrate Your Weebly Site to Webflow",
+    "ogDescription": "Weebly is an outdated platform that is entering end-of-life status. Rescue your Weebly website by migrating to Webflow with our MigrationFx platform.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/0669876926f202dcbfff248a74d4a90b.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/about-luminar-discover-our-world-class-design-services\r\n        ",
+    "title": "About Luminar | Discover Our World-Class Design Services",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Empowering businesses‍large and small.",
+    "ogTitle": "About Luminar | Discover Our World-Class Design Services",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/429f9dd89fad1686dcbc6aa24d04e699.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/case-studies\r\n        ",
+    "title": "Case Studies | Discover Businesses Transformed by Luminar",
+    "description": "See how over 100 businesses unlocked revenue growth and achieved their goals with Luminar Digital's results-driven marketing solutions.",
+    "h1": "Customer Stories",
+    "ogTitle": "Case Studies | Discover Businesses Transformed by Luminar",
+    "ogDescription": "See how over 100 businesses unlocked revenue growth and achieved their goals with Luminar Digital's results-driven marketing solutions.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/59f99180e6b82aaf375357b578de7edf.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/platform-consultation-by-luminar\r\n        ",
+    "title": "Platform Consultation by Luminar",
+    "description": "Where should you migrate your Weebly website to? Which website builder should you choose? All of these are important questions that we can answer.",
+    "h1": "Request a free consultation on which platform is the best fit to move your Weebly website to. Scroll down and fill out the form below.  ",
+    "ogTitle": "Platform Consultation by Luminar",
+    "ogDescription": "Where should you migrate your Weebly website to? Which website builder should you choose? All of these are important questions that we can answer.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/d496aceb6a92780255ce7248dd0849b8.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/contact-us\r\n        ",
+    "title": "Contact us",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Boost your business, today.Let's chat.",
+    "ogTitle": "Contact us",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/f35c944bee2f99fae3cc9c6984a545cd.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/get-started-with-migration\r\n        ",
+    "title": "Get Started With Migration",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Say goodbye to Weebly's limits. Get started with your dream website",
+    "ogTitle": "Get Started With Migration",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/9860ef5267f6a8b70428025f9ac9a09f.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/request-quote\r\n        ",
+    "title": "Request-Quote",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Request a quote for digital solutionsthat deliver results",
+    "ogTitle": "Request-Quote",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/9b5645cfb6d66d7477db05f699523cf9.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/director-of-lead-generation\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Application Developer",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/1aa26dd132da651b5a25e03219e475ae.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/inbound-sales-specialist\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Inbound Sales Specialist",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/1cfd5ce060b5a298f6bd23eb0c5d9af3.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/javascript-developer\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Javascript Developer",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/7baaed539847a04f2bc5b5cf79ae93f3.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/lead-ui-ux-director\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Lead UI/UX Director",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/0a6a60384d9bcbc54bf4e5dac77f83b3.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/market-research-analyst\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Market Research Analyst",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/fd005005f8ef89c1f419e34e4fb9f52a.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/product-designer\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Product Designer",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/658dabf1bb913f1eb8d7d5331354e500.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/product-manager\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Product Manager",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/d2a1eee44d653be9bcf5e4b9305d856f.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/seo-specialist\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "SEO Specialist",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/7fa29593c15321651c413ff33995e1e4.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/ui-ux-designer\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "UI/UX Designer",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/1a799e9191768cfcefa577d1a98c7387.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/jobs/web-design-development-website-coordinator\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Web Design & Development Website Coordinator",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/bfccc2190ca623c33031f683f0ac3688.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/blog-categories/branding\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "The Business Insight Journal",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/5ffea99db9e0d519c9595f3dd2293ab8.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/blog-categories/business\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "The Business Insight Journal",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/95ac75d22f9d8d28017a86c519f0eb0d.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/blog-categories/design\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "The Business Insight Journal",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/ac34a60195845e3d9640b6d1363e67b1.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/blog-categories/marketing\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "The Business Insight Journal",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/51994b2f4114834e44792cc9c6afff8b.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/blog-categories/website-builders\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "The Business Insight Journal",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/fd7bcbfc2301dd7be93be0baa87b6334.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/customer-story/fellow\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Fellow shortened it’s lead time on customer orders and made big bucks.",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/d4562d8b952f277643f866f6697ee715.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/customer-story/habitat\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Habitat used Pivot’s Sales Funnel platform to grow their business to over 10,000 users.",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/b117bd25c4d6e81a489baf7b9413cdd0.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/customer-story/northwest\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Northwest leveraged Business Analytics to help launch their product and grow their base.",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/c03420050ceb592e5f4a124237415a6e.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/customer-story/petsky\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Petsky leveraged Pivot’s dynamic CRM capabilities to free up collaboration time.",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/4da20ffca6d1bcd2764c21c8d3c5cedc.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/customer-story/saturday\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Saturday increased their sales performance by 35% in their first month.",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/50adc713f982269ec30de1ca2d89354c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/team/anita-sharma\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Anita Sharma",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/e2f33e6a9695a20172189d5d8e44af9f.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/team/belinda-kernot\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Belinda Kernot",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/b9c764490ad21fdb162ebb1dc3013ed8.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/team/dan-price\r\n        ",
+    "title": "Pivot - Webflow HTML Website Template",
+    "description": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "h1": "Dan Price",
+    "ogTitle": "Pivot - Webflow HTML Website Template",
+    "ogDescription": "Pivot presents a casual, playful character with care-free exuberance, providing all the features you need to launch your next startup and get stuff done.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/73bc7e46a8dccbfc9b3d7137d38e681e.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/best-accessibility-practices-in-web-design\r\n        ",
+    "title": "Important Accessibility Practices in Web Design",
+    "description": "Building websites that are accessible for all audiences is a critical component of a well-functioning digital marketing strategy.",
+    "h1": "Best accessibility practices in web design",
+    "ogTitle": "Important Accessibility Practices in Web Design",
+    "ogDescription": "Building websites that are accessible for all audiences is a critical component of a well-functioning digital marketing strategy.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/311264da26c290ade50ae50bfc7a2de6.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/building-brand-identity-through-effective-web-design\r\n        ",
+    "title": "Building Brand Identity Through Effective Web Design",
+    "description": "Discover the best strategies to build an effective brand identity by leveraging proper web design.",
+    "h1": "Building brand identity through effective web design",
+    "ogTitle": "Building Brand Identity Through Effective Web Design",
+    "ogDescription": "Discover the best strategies to build an effective brand identity by leveraging proper web design.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/840ddf8a962d56979d9e6931b1fcfd3c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/design-strategies-that-work-for-maximizing-conversion-rates\r\n        ",
+    "title": "Seeking to improve your conversion rates? Discover design strategies to boost conversion rates.",
+    "description": "See how you can implement smart design-first strategies to boost your conversion rates.",
+    "h1": "Design strategies that work for maximizing conversion rates",
+    "ogTitle": "Seeking to improve your conversion rates? Discover design strategies to boost conversion rates.",
+    "ogDescription": "See how you can implement smart design-first strategies to boost your conversion rates.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/142d5a45bc6fd548874293f209365735.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/e-commerce-web-design-key-elements-of-success\r\n        ",
+    "title": "7 Key Elements of Success When Building E-Commerce Websites",
+    "description": "When building e-commerce websites, there are seven critical areas you need to pay attention to. Learn more in this post.",
+    "h1": "E-Commerce web design: key elements of success",
+    "ogTitle": "7 Key Elements of Success When Building E-Commerce Websites",
+    "ogDescription": "When building e-commerce websites, there are seven critical areas you need to pay attention to. Learn more in this post.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/3866637bbff26b63a44f7aae7e30c11f.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/emerging-technologies-in-web-development\r\n        ",
+    "title": "Emerging Technologies in Web Development for 2024",
+    "description": "The landscape of web design and development is rapidly changing. In this post, we go over the top emerging technologies in the realm of web development for 2024.",
+    "h1": "Emerging technologies in web development",
+    "ogTitle": "Emerging Technologies in Web Development for 2024",
+    "ogDescription": "The landscape of web design and development is rapidly changing. In this post, we go over the top emerging technologies in the realm of web development for 2024.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/7ea3c4ec386f292f8ba125dfaac6ab09.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/exploring-the-psychology-of-color-in-web-design\r\n        ",
+    "title": "Discover How to Leverage Color in Web Design",
+    "description": "Color is a critical component of web design. Discover how you can leverage color to make stunning advances in web design.",
+    "h1": "Exploring the psychology of color in web design",
+    "ogTitle": "Discover How to Leverage Color in Web Design",
+    "ogDescription": "Color is a critical component of web design. Discover how you can leverage color to make stunning advances in web design.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/ca9507238b7f3c78ddbc46b616d6b7df.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/how-generative-ai-can-boost-your-business\r\n        ",
+    "title": "Generative AI is Going to Revolutionize Business. Here's How.",
+    "description": "Discover how generative AI is poised to revolutionize the global business landscape, and how it can be used to boost your business.",
+    "h1": "How generative AI can boost your business",
+    "ogTitle": "Generative AI is Going to Revolutionize Business. Here's How.",
+    "ogDescription": "Discover how generative AI is poised to revolutionize the global business landscape, and how it can be used to boost your business.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/21d9be3bc0d3b6a00ae4aca7584ed67c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/how-good-web-design-translates-to-better-business\r\n        ",
+    "title": "Discover How Good Web Design Can Help You Boost Revenue",
+    "description": "Web design is perhaps the most critical component of your digital marketing strategy, as it represents your business. Discover how good design can help you significantly boost business revenue.",
+    "h1": "How good web design translates to better business",
+    "ogTitle": "Discover How Good Web Design Can Help You Boost Revenue",
+    "ogDescription": "Web design is perhaps the most critical component of your digital marketing strategy, as it represents your business. Discover how good design can help you significantly boost business revenue.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/c2119e74a59d7e29560e8c15f842916c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/how-to-use-video-content-in-web-design\r\n        ",
+    "title": "Video Content in Web Design: Best Practices",
+    "description": "Discover the best practices for using video content in web design.",
+    "h1": "How to use video content in web design",
+    "ogTitle": "Video Content in Web Design: Best Practices",
+    "ogDescription": "Discover the best practices for using video content in web design.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/e871c8ccb45da465a255e8d1d0fde557.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/is-weebly-dead\r\n        ",
+    "title": "Is Weebly a Dead Builder? What's Going On With Weebly in 2024",
+    "description": "Weebly is being shut down. Learn more in this article.",
+    "h1": "Is Weebly Dead?",
+    "ogTitle": "Is Weebly a Dead Builder? What's Going On With Weebly in 2024",
+    "ogDescription": "Weebly is being shut down. Learn more in this article.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/531afb6fc23325d8c3f55eb23e712ef6.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/personalization-in-web-design\r\n        ",
+    "title": "Enhancing User Experience Through Personalization",
+    "description": "Discover how personalization plays a crucial role in enhancing user experience.",
+    "h1": "Personalization in web design",
+    "ogTitle": "Enhancing User Experience Through Personalization",
+    "ogDescription": "Discover how personalization plays a crucial role in enhancing user experience.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/9af1effe4ecba85021000d4f35a65f2c.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/the-impact-of-mobile-first-design-on-user-engagement\r\n        ",
+    "title": "How Mobile-First Design Impacts User Engagement",
+    "description": "Discover how mobile-first design can impact user engagement in a great positive way.",
+    "h1": "The impact of mobile-first design on user engagement",
+    "ogTitle": "How Mobile-First Design Impacts User Engagement",
+    "ogDescription": "Discover how mobile-first design can impact user engagement in a great positive way.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/3607550d8a6d9a4a4bac90569a813097.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/the-power-of-custom-illustrations-in-web-design\r\n        ",
+    "title": "Custom Illustrations and Web Design: The Synergy",
+    "description": "Discover the power of using custom illustrations in web design.",
+    "h1": "The power of custom illustrations in web design",
+    "ogTitle": "Custom Illustrations and Web Design: The Synergy",
+    "ogDescription": "Discover the power of using custom illustrations in web design.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/02664dd3b427d13872b353e0cfd0d76e.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/the-role-of-web-design-in-digital-marketing\r\n        ",
+    "title": "Discover The Critical Role That Web Design Plays in Digital Marketing",
+    "description": "Web design is a crucial component of digital marketing. Discover how.",
+    "h1": "The role of web design in digital marketing",
+    "ogTitle": "Discover The Critical Role That Web Design Plays in Digital Marketing",
+    "ogDescription": "Web design is a crucial component of digital marketing. Discover how.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/48d639de85bda6732475f0325fedd214.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/using-ppc-ads-to-promote-your-business\r\n        ",
+    "title": "Discover How to Use PPC Ads to Promote Your Online Business",
+    "description": "Learn more about the power of using PPC ads to help promote your business forward.",
+    "h1": "Using PPC ads to promote your business",
+    "ogTitle": "Discover How to Use PPC Ads to Promote Your Online Business",
+    "ogDescription": "Learn more about the power of using PPC ads to help promote your business forward.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/4c0db42e17ffbaf17dd009ec776808cd.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/what-makes-a-website-great-ux-perspective\r\n        ",
+    "title": "From a UX Perspective: What Makes a Website Great",
+    "description": "When building an effective website, it is important to consider the UX perspective of things. Here's what makes a website great from the UX side of things.",
+    "h1": "What makes a website great? UX perspective",
+    "ogTitle": "From a UX Perspective: What Makes a Website Great",
+    "ogDescription": "When building an effective website, it is important to consider the UX perspective of things. Here's what makes a website great from the UX side of things.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/fc7a46292a4eee3d87a412de53b36315.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/whats-going-on-with-weebly\r\n        ",
+    "title": "Weebly is Shutting Down. Discover How to Migrate Your Weebly Website.",
+    "description": "Weebly is shutting down. Learn what's going on behind the scenes and ways to rescue your Weebly website.",
+    "h1": "The Weebly website builder is going away",
+    "ogTitle": "Weebly is Shutting Down. Discover How to Migrate Your Weebly Website.",
+    "ogDescription": "Weebly is shutting down. Learn what's going on behind the scenes and ways to rescue your Weebly website.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/4531dbb10a4fcf1489e7303c948bd495.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/post/why-webflow-beats-wordpress\r\n        ",
+    "title": "Webflow vs Wordpress in 2024: The Winner is Clear",
+    "description": "Discover how Webflow stacks up against Wordpress, and which platform you should go with.",
+    "h1": "Why Webflow beats Wordpress",
+    "ogTitle": "Webflow vs Wordpress in 2024: The Winner is Clear",
+    "ogDescription": "Discover how Webflow stacks up against Wordpress, and which platform you should go with.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/bc4d2fc61ece28b052c5c83900dccafe.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/features/boost-revenue-leads-conversions\r\n        ",
+    "title": "Boost Revenue, Leads, and Conversions",
+    "description": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "h1": "Boost Revenue, Leads, and Conversions",
+    "ogTitle": "Boost Revenue, Leads, and Conversions",
+    "ogDescription": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/2636075ba08faee0e44d79d4b1b4169e.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/features/brand-new-website-design\r\n        ",
+    "title": "Get a Beautiful New Website Design",
+    "description": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "h1": "Get a Beautiful New Website Design",
+    "ogTitle": "Get a Beautiful New Website Design",
+    "ogDescription": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/c2a8c37433aee7be2cf56da773aebfeb.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/features/risk-free-migration-to-webflow\r\n        ",
+    "title": "Risk-Free Migration to a Better Future",
+    "description": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "h1": "Risk-Free Migration to a Better Future",
+    "ogTitle": "Risk-Free Migration to a Better Future",
+    "ogDescription": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/9486d7e28483321625fdd83694644e1a.png"
+  },
+  {
+    "url": "\r\n            https://www.luminardigital.com/features/watch-seo-and-traffic-skyrocket\r\n        ",
+    "title": "Increase SEO and Organic Traffic",
+    "description": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "h1": "Increase SEO and Organic Traffic",
+    "ogTitle": "Increase SEO and Organic Traffic",
+    "ogDescription": "Discover the benefits of Migrating from Weebly to Webflow.",
+    "twitterCard": "summary_large_image",
+    "screenshotPath": "/screenshots/4bb94d313e67c7186a61f709cc4580ab.png"
+  }
+]
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/SERVER.JS CODE IS BELOW
+const axios = require('axios');
+const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
+const fs = require('fs').promises;
+const fsSync = require('fs');
+const path = require('path');
+const xml2js = require('xml2js');
+const express = require('express');
+const WebSocket = require('ws');
+const crypto = require('crypto');
+
+const app = express();
+const port = 3000;
+
+app.use(express.static('public'));
+app.use(express.json());
+
+const wss = new WebSocket.Server({ noServer: true });
+
+function generateSafeFilename(url) {
+  return crypto.createHash('md5').update(url).digest('hex') + '.png';
+}
+
+async function parseSitemap(sitemapUrl) {
+  console.log(`Parsing sitemap: ${sitemapUrl}`);
+  const response = await axios.get(sitemapUrl);
+  const parser = new xml2js.Parser();
+  const result = await parser.parseStringPromise(response.data);
+  console.log(`Sitemap parsed. Found ${result.urlset.url.length} URLs.`);
+  return result.urlset.url.map(url => url.loc[0]);
+}
+
+async function captureScreenshot(url, outputPath) {
+  console.log(`Capturing screenshot for: ${url}`);
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 1600, height: 900 });
+    await page.goto(url, { 
+      waitUntil: 'networkidle0',
+      timeout: 60000 // Increase timeout to 60 seconds
+    });
+    await page.screenshot({ path: outputPath, fullPage: true });
+    console.log(`Screenshot captured for: ${url}`);
+  } catch (error) {
+    console.error(`Error capturing screenshot for ${url}:`, error.message);
+    // Create a simple error image
+    await page.setContent(`<html><body><h1>Error loading page</h1><p>${error.message}</p></body></html>`);
+    await page.screenshot({ path: outputPath, fullPage: true });
+  } finally {
+    await browser.close();
+  }
+}
+
+async function extractSEOData(url) {
+  console.log(`Extracting SEO data for: ${url}`);
+  try {
+    const response = await axios.get(url, { timeout: 30000 });
+    const $ = cheerio.load(response.data);
+    
+    const seoData = {
+      url: url,
+      title: $('title').text(),
+      description: $('meta[name="description"]').attr('content'),
+      keywords: $('meta[name="keywords"]').attr('content'),
+      h1: $('h1').first().text(),
+      canonicalUrl: $('link[rel="canonical"]').attr('href'),
+      ogTitle: $('meta[property="og:title"]').attr('content'),
+      ogDescription: $('meta[property="og:description"]').attr('content'),
+      ogImage: $('meta[property="og:image"]').attr('content'),
+      twitterCard: $('meta[name="twitter:card"]').attr('content'),
+      twitterTitle: $('meta[name="twitter:title"]').attr('content'),
+      twitterDescription: $('meta[name="twitter:description"]').attr('content'),
+      twitterImage: $('meta[name="twitter:image"]').attr('content'),
+    };
+
+    console.log(`SEO data extracted for: ${url}`);
+    return seoData;
+  } catch (error) {
+    console.error(`Error extracting SEO data for ${url}:`, error.message);
+    return {
+      url: url,
+      title: 'Error extracting SEO data',
+      description: error.message
+    };
+  }
+}
+
+async function processUrl(url, index, total, crawlId, retries = 3) {
+  const filename = generateSafeFilename(url);
+  const screenshotPath = path.join(__dirname, 'public', 'screenshots', crawlId, filename);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await captureScreenshot(url, screenshotPath);
+      const seoData = await extractSEOData(url);
+      return { 
+        ...seoData, 
+        screenshotPath: `/screenshots/${crawlId}/${filename}` 
+      };
+    } catch (error) {
+      console.error(`Error processing ${url} (attempt ${attempt}/${retries}):`, error.message);
+      if (attempt === retries) {
+        return {
+          url,
+          title: 'Error processing page',
+          description: `Failed after ${retries} attempts: ${error.message}`,
+          screenshotPath: `/screenshots/${crawlId}/${filename}`
+        };
+      }
+      // Wait for a short time before retrying
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+}
+
+app.post('/process-sitemap', async (req, res) => {
+  const { sitemapUrl, concurrency = 5 } = req.body;
+  const crawlId = Date.now().toString();
+  res.json({ message: 'Processing started', crawlId });
+
+  const urls = await parseSitemap(sitemapUrl);
+  const results = [];
+
+  // Create necessary directories
+  const screenshotsDir = path.join(__dirname, 'public', 'screenshots', crawlId);
+  const resultsDir = path.join(__dirname, 'public', 'results');
+  await fs.mkdir(screenshotsDir, { recursive: true });
+  await fs.mkdir(resultsDir, { recursive: true });
+
+  for (let i = 0; i < urls.length; i += concurrency) {
+    const batch = urls.slice(i, i + concurrency);
+    console.log(`Processing batch ${i / concurrency + 1} of ${Math.ceil(urls.length / concurrency)}`);
+    
+    const batchResults = await Promise.all(
+      batch.map(url => processUrl(url, i + batch.indexOf(url), urls.length, crawlId))
+    );
+
+    results.push(...batchResults);
+
+    // Send progress update
+    const progress = Math.round(((i + batch.length) / urls.length) * 100);
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'progress', progress }));
+      }
+    });
+  }
+
+  console.log('All URLs processed. Saving results...');
+  const resultsPath = path.join(resultsDir, `${crawlId}.json`);
+  await fs.writeFile(resultsPath, JSON.stringify(results, null, 2));
+  console.log('Results saved.');
+
+  // Send completion message
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'complete',
+        resultsUrl: `/results.html?crawlId=${crawlId}`
+      }));
+    }
+  });
+});
+
+app.get('/results/:crawlId', (req, res) => {
+  const crawlId = req.params.crawlId;
+  const resultsPath = path.join(__dirname, 'public', 'results', `${crawlId}.json`);
+  
+  if (fsSync.existsSync(resultsPath)) {
+    res.sendFile(resultsPath);
+  } else {
+    res.status(404).json({ error: 'Crawl results not found' });
+  }
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/results', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'results.html'));
+});
+
+const server = app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});
+
+server.on('upgrade', (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, socket => {
+    wss.emit('connection', socket, request);
+  });
+});

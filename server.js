@@ -8,6 +8,7 @@ const xml2js = require('xml2js');
 const express = require('express');
 const WebSocket = require('ws');
 const crypto = require('crypto');
+const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const port = 3000;
@@ -19,6 +20,53 @@ const wss = new WebSocket.Server({ noServer: true });
 
 function generateSafeFilename(url) {
   return crypto.createHash('md5').update(url).digest('hex') + '.png';
+}
+
+function initDatabase() {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database('./sitemap_results.db', (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        db.run(`CREATE TABLE IF NOT EXISTS crawls (
+          id TEXT PRIMARY KEY,
+          url TEXT,
+          date TEXT
+        )`, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            db.run(`CREATE TABLE IF NOT EXISTS pages (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              crawl_id TEXT,
+              url TEXT,
+              title TEXT,
+              description TEXT,
+              keywords TEXT,
+              h1 TEXT,
+              canonical_url TEXT,
+              og_title TEXT,
+              og_description TEXT,
+              og_image TEXT,
+              twitter_card TEXT,
+              twitter_title TEXT,
+              twitter_description TEXT,
+              twitter_image TEXT,
+              screenshot_path TEXT,
+              page_type TEXT DEFAULT 'cms',
+              FOREIGN KEY (crawl_id) REFERENCES crawls (id)
+            )`, (err) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve(db);
+              }
+            });
+          }
+        });
+      }
+    });
+  });
 }
 
 async function parseSitemap(sitemapUrl) {
@@ -123,9 +171,17 @@ app.post('/process-sitemap', async (req, res) => {
 
   // Create necessary directories
   const screenshotsDir = path.join(__dirname, 'public', 'screenshots', crawlId);
-  const resultsDir = path.join(__dirname, 'public', 'results');
   await fs.mkdir(screenshotsDir, { recursive: true });
-  await fs.mkdir(resultsDir, { recursive: true });
+
+  const db = await initDatabase();
+
+  // Save crawl information
+  await new Promise((resolve, reject) => {
+    db.run('INSERT INTO crawls (id, url, date) VALUES (?, ?, ?)', [crawlId, sitemapUrl, new Date().toISOString()], (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
 
   for (let i = 0; i < urls.length; i += concurrency) {
     const batch = urls.slice(i, i + concurrency);
@@ -134,6 +190,28 @@ app.post('/process-sitemap', async (req, res) => {
     const batchResults = await Promise.all(
       batch.map(url => processUrl(url, i + batch.indexOf(url), urls.length, crawlId))
     );
+
+    // Save batch results to SQLite
+    for (const result of batchResults) {
+      await new Promise((resolve, reject) => {
+        db.run(`INSERT INTO pages (
+          crawl_id, url, title, description, keywords, h1, canonical_url,
+          og_title, og_description, og_image,
+          twitter_card, twitter_title, twitter_description, twitter_image,
+          screenshot_path
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crawlId, result.url, result.title, result.description, result.keywords,
+          result.h1, result.canonicalUrl, result.ogTitle, result.ogDescription,
+          result.ogImage, result.twitterCard, result.twitterTitle,
+          result.twitterDescription, result.twitterImage, result.screenshotPath
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
 
     results.push(...batchResults);
 
@@ -146,10 +224,7 @@ app.post('/process-sitemap', async (req, res) => {
     });
   }
 
-  console.log('All URLs processed. Saving results...');
-  const resultsPath = path.join(resultsDir, `${crawlId}.json`);
-  await fs.writeFile(resultsPath, JSON.stringify(results, null, 2));
-  console.log('Results saved.');
+  console.log('All URLs processed.');
 
   // Send completion message
   wss.clients.forEach(client => {
@@ -160,17 +235,50 @@ app.post('/process-sitemap', async (req, res) => {
       }));
     }
   });
+
+  db.close();
 });
 
-app.get('/results/:crawlId', (req, res) => {
+app.get('/results/:crawlId', async (req, res) => {
   const crawlId = req.params.crawlId;
-  const resultsPath = path.join(__dirname, 'public', 'results', `${crawlId}.json`);
-  
-  if (fsSync.existsSync(resultsPath)) {
-    res.sendFile(resultsPath);
-  } else {
-    res.status(404).json({ error: 'Crawl results not found' });
-  }
+  const db = await initDatabase();
+
+  db.all('SELECT * FROM pages WHERE crawl_id = ?', [crawlId], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else if (rows.length === 0) {
+      res.status(404).json({ error: 'Crawl results not found' });
+    } else {
+      res.json(rows);
+    }
+    db.close();
+  });
+});
+
+app.post('/update-page-type', async (req, res) => {
+  const { crawlId, url, pageType } = req.body;
+  const db = await initDatabase();
+
+  db.run('UPDATE pages SET page_type = ? WHERE crawl_id = ? AND url = ?', [pageType, crawlId, url], (err) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json({ success: true });
+    }
+    db.close();
+  });
+});
+
+app.get('/previous-crawls', async (req, res) => {
+  const db = await initDatabase();
+  db.all('SELECT * FROM crawls ORDER BY date DESC LIMIT 10', (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json(rows);
+    }
+    db.close();
+  });
 });
 
 app.get('/', (req, res) => {
