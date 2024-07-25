@@ -24,25 +24,26 @@
             object-fit: contain;
             max-height: 600px;
         }
-        .scroll-container {
-            flex-grow: 1;
-            overflow-y: auto;
+        .content-container {
             padding: 1rem;
-            max-height: 300px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
         }
         .page-type {
             padding: 0.5rem 1rem;
             background-color: #f7fafc;
             border-top: 1px solid #e2e8f0;
         }
-        .visit-link {
+        .visit-link, .copy-button {
             padding: 0.5rem;
             text-align: center;
             background-color: #4a5568;
             color: white;
             text-decoration: none;
+            cursor: pointer;
         }
-        .visit-link:hover {
+        .visit-link:hover, .copy-button:hover {
             background-color: #2d3748;
         }
         .section-title {
@@ -88,6 +89,11 @@
                 response = await fetch('/results.json');
             }
             crawlData = await response.json();
+            crawlData.forEach(page => {
+                if (!page.page_type) {
+                    page.page_type = 'cms';
+                }
+            });
             displayResults(crawlData);
         }
 
@@ -135,7 +141,7 @@
             box.className = 'box';
             box.innerHTML = `
                 <img src="${page.screenshot_path}" alt="${page.title}" loading="lazy">
-                <div class="scroll-container">
+                <div class="content-container">
                     <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
                     <div class="space-y-2 text-sm text-gray-600">
                         <p><span class="font-semibold">URL:</span> ${page.url}</p>
@@ -165,13 +171,43 @@
                         <span class="ml-2">Custom</span>
                     </label>
                     <label class="inline-flex items-center mr-4">
-                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.page_type === 'cms' ? 'checked' : ''}>
+                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.page_type === 'cms' || !page.page_type ? 'checked' : ''}>
                         <span class="ml-2">CMS</span>
                     </label>
                 </div>
                 <a href="${page.url}" target="_blank" class="visit-link">Visit Page</a>
+                <div class="copy-button" data-index="${index}">Copy All Data</div>
             `;
             return box;
+        }
+
+        function copyPageData(page) {
+            const formattedData = `
+Page Name: ${page.title}
+Page URL: ${page.url}
+SEO Description: ${page.description || 'N/A'}
+SEO Keywords: ${page.keywords || 'N/A'}
+H1: ${page.h1 || 'N/A'}
+Canonical URL: ${page.canonical_url || 'N/A'}
+Page Type: ${page.page_type}
+
+Open Graph Data:
+- Title: ${page.og_title || 'N/A'}
+- Description: ${page.og_description || 'N/A'}
+- Image: ${page.og_image || 'N/A'}
+
+Twitter Card Data:
+- Card: ${page.twitter_card || 'N/A'}
+- Title: ${page.twitter_title || 'N/A'}
+- Description: ${page.twitter_description || 'N/A'}
+- Image: ${page.twitter_image || 'N/A'}
+            `.trim();
+
+            navigator.clipboard.writeText(formattedData).then(() => {
+                alert('Page data copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
         }
 
         function organizeResults() {
@@ -185,17 +221,32 @@
                 crawlData[index].page_type = value;
 
                 // Send update to server
-                await fetch('/update-page-type', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        crawlId: crawlId,
-                        url: crawlData[index].url,
-                        pageType: value
-                    }),
-                });
+                try {
+                    const response = await fetch('/update-page-type', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            crawlId: crawlId,
+                            url: crawlData[index].url,
+                            pageType: value
+                        }),
+                    });
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to update page type');
+                    }
+                } catch (error) {
+                    console.error('Error updating page type:', error);
+                }
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('copy-button')) {
+                const index = parseInt(e.target.dataset.index);
+                copyPageData(crawlData[index]);
             }
         });
 

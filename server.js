@@ -152,7 +152,8 @@ async function processUrl(url, index, total, crawlId, retries = 3) {
       const seoData = await extractSEOData(url);
       return { 
         ...seoData, 
-        screenshotPath: `/screenshots/${crawlId}/${filename}` 
+        screenshotPath: `/screenshots/${crawlId}/${filename}`,
+        page_type: 'cms'  // Set default page_type
       };
     } catch (error) {
       console.error(`Error processing ${url} (attempt ${attempt}/${retries}):`, error.message);
@@ -161,7 +162,8 @@ async function processUrl(url, index, total, crawlId, retries = 3) {
           url,
           title: 'Error processing page',
           description: `Failed after ${retries} attempts: ${error.message}`,
-          screenshotPath: `/screenshots/${crawlId}/${filename}`
+          screenshotPath: `/screenshots/${crawlId}/${filename}`,
+          page_type: 'cms'  // Set default page_type even for error cases
         };
       }
       // Wait for a short time before retrying
@@ -207,13 +209,14 @@ app.post('/process-sitemap', async (req, res) => {
           crawl_id, url, title, description, keywords, h1, canonical_url,
           og_title, og_description, og_image,
           twitter_card, twitter_title, twitter_description, twitter_image,
-          screenshot_path
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          screenshot_path, page_type
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           crawlId, result.url, result.title, result.description, result.keywords,
           result.h1, result.canonicalUrl, result.ogTitle, result.ogDescription,
           result.ogImage, result.twitterCard, result.twitterTitle,
-          result.twitterDescription, result.twitterImage, result.screenshotPath
+          result.twitterDescription, result.twitterImage, result.screenshotPath,
+          result.page_type
         ],
         (err) => {
           if (err) reject(err);
