@@ -41,6 +41,11 @@
         <div id="result" class="mb-8 text-center"></div>
         <h2 class="text-2xl font-bold mb-4 text-gray-800">Previous Crawls</h2>
         <div id="previousCrawls" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+        <div class="mt-8 text-center">
+            <button id="clearDatabaseBtn" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+                Clear Database
+            </button>
+        </div>
     </div>
 
     <script>
@@ -50,9 +55,10 @@
         const progressPercentage = document.getElementById('progressPercentage');
         const result = document.getElementById('result');
         const previousCrawls = document.getElementById('previousCrawls');
-    
+        const clearDatabaseBtn = document.getElementById('clearDatabaseBtn');
+
         let ws;
-    
+
         async function loadPreviousCrawls() {
             const response = await fetch('/previous-crawls');
             const crawls = await response.json();
@@ -70,23 +76,23 @@
                 previousCrawls.appendChild(crawlElement);
             });
         }
-    
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const sitemapUrl = document.getElementById('sitemapUrl').value;
-    
+
             progressContainer.classList.remove('hidden');
             progressBar.style.width = '0%';
             progressPercentage.textContent = '0%';
             result.innerHTML = '';
-    
+
             const response = await fetch('/process-sitemap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sitemapUrl })
             });
             const { crawlId } = await response.json();
-    
+
             ws = new WebSocket(`ws://${window.location.host}`);
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -100,7 +106,20 @@
                 }
             };
         });
-    
+
+        clearDatabaseBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear the entire database? This action cannot be undone.')) {
+                const response = await fetch('/clear-database', { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Database cleared successfully.');
+                    loadPreviousCrawls();
+                } else {
+                    alert('Failed to clear database. Please try again.');
+                }
+            }
+        });
+
         loadPreviousCrawls();
     </script>
 </body>

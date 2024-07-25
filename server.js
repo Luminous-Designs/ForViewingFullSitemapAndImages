@@ -9,6 +9,7 @@ const express = require('express');
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
+const sharp = require('sharp');
 
 const app = express();
 const port = 3000;
@@ -19,7 +20,7 @@ app.use(express.json());
 const wss = new WebSocket.Server({ noServer: true });
 
 function generateSafeFilename(url) {
-  return crypto.createHash('md5').update(url).digest('hex') + '.png';
+  return crypto.createHash('md5').update(url).digest('hex') + '.jpg';
 }
 
 function initDatabase() {
@@ -88,13 +89,21 @@ async function captureScreenshot(url, outputPath) {
       waitUntil: 'networkidle0',
       timeout: 60000 // Increase timeout to 60 seconds
     });
-    await page.screenshot({ path: outputPath, fullPage: true });
-    console.log(`Screenshot captured for: ${url}`);
+    const screenshot = await page.screenshot({ fullPage: true });
+    await sharp(screenshot)
+      .resize({ width: 600 })
+      .jpeg({ quality: 80 })
+      .toFile(outputPath);
+    console.log(`Screenshot captured and optimized for: ${url}`);
   } catch (error) {
     console.error(`Error capturing screenshot for ${url}:`, error.message);
     // Create a simple error image
     await page.setContent(`<html><body><h1>Error loading page</h1><p>${error.message}</p></body></html>`);
-    await page.screenshot({ path: outputPath, fullPage: true });
+    const errorScreenshot = await page.screenshot();
+    await sharp(errorScreenshot)
+      .resize({ width: 600 })
+      .jpeg({ quality: 80 })
+      .toFile(outputPath);
   } finally {
     await browser.close();
   }
@@ -278,6 +287,22 @@ app.get('/previous-crawls', async (req, res) => {
       res.json(rows);
     }
     db.close();
+  });
+});
+
+app.post('/clear-database', async (req, res) => {
+  const db = await initDatabase();
+  db.serialize(() => {
+    db.run('DELETE FROM pages');
+    db.run('DELETE FROM crawls');
+    db.run('VACUUM', (err) => {
+      if (err) {
+        res.status(500).json({ error: 'Database error' });
+      } else {
+        res.json({ success: true });
+      }
+      db.close();
+    });
   });
 });
 
