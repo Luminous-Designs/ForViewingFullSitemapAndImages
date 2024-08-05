@@ -29,41 +29,42 @@ function initDatabase() {
       if (err) {
         reject(err);
       } else {
-        db.run(`CREATE TABLE IF NOT EXISTS crawls (
-          id TEXT PRIMARY KEY,
-          url TEXT,
-          date TEXT
-        )`, (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            db.run(`CREATE TABLE IF NOT EXISTS pages (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              crawl_id TEXT,
-              url TEXT,
-              title TEXT,
-              description TEXT,
-              keywords TEXT,
-              h1 TEXT,
-              canonical_url TEXT,
-              og_title TEXT,
-              og_description TEXT,
-              og_image TEXT,
-              twitter_card TEXT,
-              twitter_title TEXT,
-              twitter_description TEXT,
-              twitter_image TEXT,
-              screenshot_path TEXT,
-              page_type TEXT DEFAULT 'cms',
-              FOREIGN KEY (crawl_id) REFERENCES crawls (id)
-            )`, (err) => {
-              if (err) {
-                reject(err);
-              } else {
-                resolve(db);
-              }
-            });
-          }
+        db.serialize(() => {
+          db.run(`CREATE TABLE IF NOT EXISTS crawls (
+            id TEXT PRIMARY KEY,
+            url TEXT,
+            date TEXT
+          )`, (err) => {
+            if (err) reject(err);
+          });
+
+          db.run(`CREATE TABLE IF NOT EXISTS pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            crawl_id TEXT,
+            url TEXT,
+            title TEXT,
+            description TEXT,
+            keywords TEXT,
+            h1 TEXT,
+            canonical_url TEXT,
+            og_title TEXT,
+            og_description TEXT,
+            og_image TEXT,
+            twitter_card TEXT,
+            twitter_title TEXT,
+            twitter_description TEXT,
+            twitter_image TEXT,
+            screenshot_path TEXT,
+            FOREIGN KEY (crawl_id) REFERENCES crawls (id)
+          )`, (err) => {
+            if (err) reject(err);
+          });
+
+          // Add page_type column if it doesn't exist
+          db.run(`ALTER TABLE pages ADD COLUMN page_type TEXT DEFAULT 'cms'`, (err) => {
+            // Ignore error if column already exists
+            resolve(db);
+          });
         });
       }
     });
