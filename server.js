@@ -10,14 +10,19 @@ const WebSocket = require('ws');
 const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
 const sharp = require('sharp');
+const { Client } = require('@notionhq/client');
+require('dotenv').config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 app.use(express.json());
 
 const wss = new WebSocket.Server({ noServer: true });
+
+// Initialize Notion client
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
 
 function generateSafeFilename(url) {
   return crypto.createHash('md5').update(url).digest('hex') + '.jpg';
@@ -55,15 +60,11 @@ function initDatabase() {
             twitter_description TEXT,
             twitter_image TEXT,
             screenshot_path TEXT,
+            page_type TEXT DEFAULT 'cms',
             FOREIGN KEY (crawl_id) REFERENCES crawls (id)
           )`, (err) => {
             if (err) reject(err);
-          });
-
-          // Add page_type column if it doesn't exist
-          db.run(`ALTER TABLE pages ADD COLUMN page_type TEXT DEFAULT 'cms'`, (err) => {
-            // Ignore error if column already exists
-            resolve(db);
+            else resolve(db);
           });
         });
       }
@@ -154,7 +155,7 @@ async function processUrl(url, index, total, crawlId, retries = 3) {
       return { 
         ...seoData, 
         screenshotPath: `/screenshots/${crawlId}/${filename}`,
-        page_type: 'cms'  // Set default page_type
+        page_type: 'cms'
       };
     } catch (error) {
       console.error(`Error processing ${url} (attempt ${attempt}/${retries}):`, error.message);
@@ -164,10 +165,9 @@ async function processUrl(url, index, total, crawlId, retries = 3) {
           title: 'Error processing page',
           description: `Failed after ${retries} attempts: ${error.message}`,
           screenshotPath: `/screenshots/${crawlId}/${filename}`,
-          page_type: 'cms'  // Set default page_type even for error cases
+          page_type: 'cms'
         };
       }
-      // Wait for a short time before retrying
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
@@ -181,13 +181,11 @@ app.post('/process-sitemap', async (req, res) => {
   const urls = await parseSitemap(sitemapUrl);
   const results = [];
 
-  // Create necessary directories
   const screenshotsDir = path.join(__dirname, 'public', 'screenshots', crawlId);
   await fs.mkdir(screenshotsDir, { recursive: true });
 
   const db = await initDatabase();
 
-  // Save crawl information
   await new Promise((resolve, reject) => {
     db.run('INSERT INTO crawls (id, url, date) VALUES (?, ?, ?)', [crawlId, sitemapUrl, new Date().toISOString()], (err) => {
       if (err) reject(err);
@@ -203,7 +201,6 @@ app.post('/process-sitemap', async (req, res) => {
       batch.map(url => processUrl(url, i + batch.indexOf(url), urls.length, crawlId))
     );
 
-    // Save batch results to SQLite
     for (const result of batchResults) {
       await new Promise((resolve, reject) => {
         db.run(`INSERT INTO pages (
@@ -228,7 +225,6 @@ app.post('/process-sitemap', async (req, res) => {
 
     results.push(...batchResults);
 
-    // Send progress update
     const progress = Math.round(((i + batch.length) / urls.length) * 100);
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
@@ -239,7 +235,6 @@ app.post('/process-sitemap', async (req, res) => {
 
   console.log('All URLs processed.');
 
-  // Send completion message
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({
@@ -308,6 +303,86 @@ app.post('/clear-database', async (req, res) => {
       db.close();
     });
   });
+});
+
+app.post('/create-notion-database', async (req, res) => {
+  const { crawlId } = req.body;
+  const db = await initDatabase();
+
+  try {
+    const crawlData = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM crawls WHERE id = ?', [crawlId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const pagesData = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM pages WHERE crawl_id = ?', [crawlId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    const response = await notion.databases.create({
+      parent: { type: 'page_id', page_id: process.env.NOTION_PARENT_PAGE_ID },
+      title: [
+        {
+          type: 'text',
+          text: {
+            content: `Website Crawl - ${new URL(crawlData.url).hostname} - ${new Date(crawlData.date).toLocaleString()}`,
+          },
+        },
+      ],
+      properties: {
+        'Page Name': { title: {} },
+        'URL': { url: {} },
+        'SEO Description': { rich_text: {} },
+        'SEO Keywords': { rich_text: {} },
+        'H1': { rich_text: {} },
+        'Canonical URL': { url: {} },
+        'OG Title': { rich_text: {} },
+        'OG Description': { rich_text: {} },
+        'OG Image': { url: {} },
+        'Twitter Card': { rich_text: {} },
+        'Twitter Title': { rich_text: {} },
+        'Twitter Description': { rich_text: {} },
+        'Twitter Image': { url: {} },
+        'Page Type': { select: { options: [{ name: 'Custom' }, { name: 'CMS' }] } },
+        'Screenshot': { files: {} },
+      },
+    });
+
+    for (const page of pagesData) {
+      await notion.pages.create({
+        parent: { database_id: response.id },
+        properties: {
+          'Page Name': { title: [{ text: { content: page.title || 'Untitled' } }] },
+          'URL': { url: page.url },
+          'SEO Description': { rich_text: [{ text: { content: page.description || '' } }] },
+          'SEO Keywords': { rich_text: [{ text: { content: page.keywords || '' } }] },
+          'H1': { rich_text: [{ text: { content: page.h1 || '' } }] },
+          'Canonical URL': { url: page.canonical_url || null },
+          'OG Title': { rich_text: [{ text: { content: page.og_title || '' } }] },
+          'OG Description': { rich_text: [{ text: { content: page.og_description || '' } }] },
+          'OG Image': { url: page.og_image || null },
+          'Twitter Card': { rich_text: [{ text: { content: page.twitter_card || '' } }] },
+          'Twitter Title': { rich_text: [{ text: { content: page.twitter_title || '' } }] },
+          'Twitter Description': { rich_text: [{ text: { content: page.twitter_description || '' } }] },
+          'Twitter Image': { url: page.twitter_image || null },
+          'Page Type': { select: { name: page.page_type === 'custom' ? 'Custom' : 'CMS' } },
+          'Screenshot': { files: [{ type: 'external', name: 'Screenshot', external: { url: `${req.protocol}://${req.get('host')}${page.screenshot_path}` } }] },
+        },
+      });
+    }
+
+    res.json({ success: true, databaseId: response.id });
+  } catch (error) {
+    console.error('Error creating Notion database:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    db.close();
+  }
 });
 
 app.get('/', (req, res) => {

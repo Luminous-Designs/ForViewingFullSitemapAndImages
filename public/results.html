@@ -68,18 +68,23 @@
 <body class="bg-gray-100 min-h-screen p-8">
     <div class="max-w-full mx-auto">
         <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
+        <div class="mb-4 flex justify-between items-center">
+            <button id="organizeButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Organize
+            </button>
+            <button id="createNotionDatabaseBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                Create Notion Database
+            </button>
+        </div>
         <div id="results" class="mb-8"></div>
     </div>
-
-    <button id="organizeButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-        Organize
-    </button>
 
     <script>
         let crawlData = [];
         const crawlId = new URLSearchParams(window.location.search).get('crawlId');
         const resultsContainer = document.getElementById('results');
         const organizeButton = document.getElementById('organizeButton');
+        const createNotionDatabaseBtn = document.getElementById('createNotionDatabaseBtn');
 
         async function loadResults() {
             let response;
@@ -220,7 +225,6 @@ Twitter Card Data:
                 const value = e.target.value;
                 crawlData[index].page_type = value;
 
-                // Send update to server
                 try {
                     const response = await fetch('/update-page-type', {
                         method: 'POST',
@@ -251,6 +255,27 @@ Twitter Card Data:
         });
 
         organizeButton.addEventListener('click', organizeResults);
+
+        createNotionDatabaseBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/create-notion-database', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ crawlId: crawlId }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Notion database created successfully!');
+                } else {
+                    alert('Failed to create Notion database. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error creating Notion database:', error);
+                alert('An error occurred while creating the Notion database.');
+            }
+        });
 
         loadResults();
     </script>
