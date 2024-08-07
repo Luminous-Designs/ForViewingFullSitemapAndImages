@@ -309,6 +309,10 @@ app.post('/create-notion-database', async (req, res) => {
   const { crawlId } = req.body;
   const db = await initDatabase();
 
+  const githubUsername = 'Luminous-Designs';
+  const githubRepo = 'ForViewingFullSitemapAndImages';
+  const githubBranch = 'main';
+
   try {
     const crawlData = await new Promise((resolve, reject) => {
       db.get('SELECT * FROM crawls WHERE id = ?', [crawlId], (err, row) => {
@@ -354,6 +358,8 @@ app.post('/create-notion-database', async (req, res) => {
     });
 
     for (const page of pagesData) {
+      const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
+
       await notion.pages.create({
         parent: { database_id: response.id },
         properties: {
@@ -371,7 +377,7 @@ app.post('/create-notion-database', async (req, res) => {
           'Twitter Description': { rich_text: [{ text: { content: page.twitter_description || '' } }] },
           'Twitter Image': { url: page.twitter_image || null },
           'Page Type': { select: { name: page.page_type === 'custom' ? 'Custom' : 'CMS' } },
-          'Screenshot': { files: [{ type: 'external', name: 'Screenshot', external: { url: `${req.protocol}://${req.get('host')}${page.screenshot_path}` } }] },
+          'Screenshot': { files: [{ type: 'external', name: 'Screenshot', external: { url: githubImageUrl } }] },
         },
       });
     }
