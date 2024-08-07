@@ -75,6 +75,9 @@
             <button id="createNotionDatabaseBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
                 Create Notion Database
             </button>
+            <button id="sendToTrelloBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-4">
+                Send to Trello
+            </button>
         </div>
         <div id="results" class="mb-8"></div>
     </div>
@@ -85,6 +88,7 @@
         const resultsContainer = document.getElementById('results');
         const organizeButton = document.getElementById('organizeButton');
         const createNotionDatabaseBtn = document.getElementById('createNotionDatabaseBtn');
+        const sendToTrelloBtn = document.getElementById('sendToTrelloBtn');
 
         async function loadResults() {
             let response;
@@ -274,6 +278,27 @@ Twitter Card Data:
             } catch (error) {
                 console.error('Error creating Notion database:', error);
                 alert('An error occurred while creating the Notion database.');
+            }
+        });
+
+        sendToTrelloBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/send-to-trello', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ crawlId: crawlId }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Data sent to Trello successfully!');
+                } else {
+                    alert('Failed to send data to Trello. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error sending data to Trello:', error);
+                alert('An error occurred while sending data to Trello.');
             }
         });
 

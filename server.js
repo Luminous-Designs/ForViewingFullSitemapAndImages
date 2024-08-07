@@ -13,6 +13,7 @@ const sharp = require('sharp');
 const { Client } = require('@notionhq/client');
 require('dotenv').config();
 
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -389,6 +390,89 @@ app.post('/create-notion-database', async (req, res) => {
   } finally {
     db.close();
   }
+});
+
+const fetch = require('node-fetch').default;
+
+const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
+const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
+
+app.post('/send-to-trello', async (req, res) => {
+    const { crawlId } = req.body;
+    const db = await initDatabase();
+
+    const githubUsername = 'Luminous-Designs';
+    const githubRepo = 'ForViewingFullSitemapAndImages';
+    const githubBranch = 'main';
+
+    try {
+        const crawlData = await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM crawls WHERE id = ?', [crawlId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        const pagesData = await new Promise((resolve, reject) => {
+            db.all('SELECT * FROM pages WHERE crawl_id = ?', [crawlId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+
+        // Create a new board for this crawl
+        const boardResponse = await fetch(`https://api.trello.com/1/boards?name=Sitemap Crawl ${crawlId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+            method: 'POST'
+        });
+        const boardData = await boardResponse.json();
+        const boardId = boardData.id;
+
+        // Create a list in the new board
+        const listResponse = await fetch(`https://api.trello.com/1/lists?name=Pages&idBoard=${boardId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+            method: 'POST'
+        });
+        const listData = await listResponse.json();
+        const listId = listData.id;
+
+        for (const page of pagesData) {
+            const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
+
+            const cardResponse = await fetch(`https://api.trello.com/1/cards?idList=${listId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: page.title || 'Untitled',
+                    desc: `
+URL: ${page.url}
+SEO Description: ${page.description || ''}
+SEO Keywords: ${page.keywords || ''}
+H1: ${page.h1 || ''}
+Canonical URL: ${page.canonical_url || ''}
+OG Title: ${page.og_title || ''}
+OG Description: ${page.og_description || ''}
+OG Image: ${page.og_image || ''}
+Twitter Card: ${page.twitter_card || ''}
+Twitter Title: ${page.twitter_title || ''}
+Twitter Description: ${page.twitter_description || ''}
+Twitter Image: ${page.twitter_image || ''}
+Page Type: ${page.page_type === 'custom' ? 'Custom' : 'CMS'}
+                    `,
+                    urlSource: githubImageUrl
+                })
+            });
+
+            await cardResponse.json();
+        }
+
+        res.json({ success: true, boardUrl: boardData.url });
+    } catch (error) {
+        console.error('Error sending data to Trello:', error);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        db.close();
+    }
 });
 
 app.get('/', (req, res) => {
