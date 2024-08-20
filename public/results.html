@@ -78,6 +78,9 @@
             <button id="sendToTrelloBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-4">
                 Send to Trello
             </button>
+            <button id="exportJsonBtn" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded ml-4">
+                Export Data to JSON
+            </button>
         </div>
         <div id="results" class="mb-8"></div>
     </div>
@@ -89,6 +92,7 @@
         const organizeButton = document.getElementById('organizeButton');
         const createNotionDatabaseBtn = document.getElementById('createNotionDatabaseBtn');
         const sendToTrelloBtn = document.getElementById('sendToTrelloBtn');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
 
         async function loadResults() {
             let response;
@@ -300,6 +304,18 @@ Twitter Card Data:
                 console.error('Error sending data to Trello:', error);
                 alert('An error occurred while sending data to Trello.');
             }
+        });
+
+        exportJsonBtn.addEventListener('click', () => {
+            const dataStr = JSON.stringify(crawlData, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `sitemap_crawl_${crawlId || 'data'}.json`;
+
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
         });
 
         loadResults();
