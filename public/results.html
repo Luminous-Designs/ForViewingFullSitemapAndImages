@@ -57,11 +57,26 @@
             margin: 2rem 0;
             border-top: 2px solid #e2e8f0;
         }
-        #organizeButton {
+        #sidebar {
             position: fixed;
-            bottom: 20px;
+            top: 50%;
             right: 20px;
+            transform: translateY(-50%);
             z-index: 1000;
+        }
+        .nav-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #4a5568;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .nav-dot.active {
+            background-color: #2d3748;
+        }
+        .group-container {
+            margin-bottom: 2rem;
         }
     </style>
 </head>
@@ -69,9 +84,6 @@
     <div class="max-w-full mx-auto">
         <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
         <div class="mb-4 flex justify-between items-center">
-            <button id="organizeButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                Organize
-            </button>
             <button id="createNotionDatabaseBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
                 Create Notion Database
             </button>
@@ -85,14 +97,16 @@
         <div id="results" class="mb-8"></div>
     </div>
 
+    <div id="sidebar"></div>
+
     <script>
         let crawlData = [];
         const crawlId = new URLSearchParams(window.location.search).get('crawlId');
         const resultsContainer = document.getElementById('results');
-        const organizeButton = document.getElementById('organizeButton');
         const createNotionDatabaseBtn = document.getElementById('createNotionDatabaseBtn');
         const sendToTrelloBtn = document.getElementById('sendToTrelloBtn');
         const exportJsonBtn = document.getElementById('exportJsonBtn');
+        const sidebar = document.getElementById('sidebar');
 
         async function loadResults() {
             let response;
@@ -110,46 +124,81 @@
             displayResults(crawlData);
         }
 
-        function displayResults(data, organized = false) {
-            resultsContainer.innerHTML = '';
-            if (organized) {
-                const customPages = data.filter(page => page.page_type === 'custom');
-                const cmsPages = data.filter(page => page.page_type === 'cms');
-
-                if (customPages.length > 0) {
-                    const customSection = createSection('Custom Pages', customPages);
-                    resultsContainer.appendChild(customSection);
-                }
-
-                if (customPages.length > 0 && cmsPages.length > 0) {
-                    const divider = document.createElement('hr');
-                    divider.className = 'divider';
-                    resultsContainer.appendChild(divider);
-                }
-
-                if (cmsPages.length > 0) {
-                    const cmsSection = createSection('CMS Pages', cmsPages);
-                    resultsContainer.appendChild(cmsSection);
-                }
-            } else {
-                const section = createSection('All Pages', data);
-                resultsContainer.appendChild(section);
+        function getUrlSlug(url) {
+            const parsedUrl = new URL(url);
+            const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
+            if (pathSegments.length === 0 || (pathSegments.length === 1 && pathSegments[0].includes('.'))) {
+                return 'root';
             }
+            return pathSegments[0];
         }
 
-        function createSection(title, pages) {
-            const section = document.createElement('div');
-            section.className = 'mb-8';
-            section.innerHTML = `
-                <h2 class="section-title">${title}</h2>
-                <div class="grid">
-                    ${pages.map((page, index) => createResultBox(page, crawlData.indexOf(page)).outerHTML).join('')}
-                </div>
-            `;
-            return section;
+        function displayResults(data) {
+            resultsContainer.innerHTML = '';
+            sidebar.innerHTML = '';
+
+            const groupedPages = data.reduce((acc, page) => {
+                const slug = getUrlSlug(page.url);
+                if (!acc[slug]) {
+                    acc[slug] = [];
+                }
+                acc[slug].push(page);
+                return acc;
+            }, {});
+
+            const sortedSlugs = Object.keys(groupedPages).sort((a, b) => {
+                if (a === 'root') return -1;
+                if (b === 'root') return 1;
+                return a.localeCompare(b);
+            });
+
+            sortedSlugs.forEach((slug, index) => {
+                const groupContainer = document.createElement('div');
+                groupContainer.className = 'group-container';
+                groupContainer.id = `group-${slug}`;
+
+                const groupTitle = document.createElement('h2');
+                groupTitle.className = 'section-title';
+                groupTitle.textContent = slug === 'root' ? 'Root Pages' : `/${slug}`;
+                groupContainer.appendChild(groupTitle);
+
+                const grid = document.createElement('div');
+                grid.className = 'grid';
+                groupedPages[slug].forEach(page => {
+                    grid.appendChild(createResultBox(page));
+                });
+                groupContainer.appendChild(grid);
+
+                resultsContainer.appendChild(groupContainer);
+
+                // Create navigation dot
+                const navDot = document.createElement('div');
+                navDot.className = 'nav-dot';
+                navDot.title = slug === 'root' ? 'Root Pages' : `/${slug}`;
+                navDot.addEventListener('click', () => {
+                    document.getElementById(`group-${slug}`).scrollIntoView({ behavior: 'smooth' });
+                });
+                sidebar.appendChild(navDot);
+            });
+
+            // Set up intersection observer for navigation dots
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const slug = entry.target.id.replace('group-', '');
+                        document.querySelectorAll('.nav-dot').forEach((dot, index) => {
+                            dot.classList.toggle('active', index === sortedSlugs.indexOf(slug));
+                        });
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            document.querySelectorAll('.group-container').forEach(container => {
+                observer.observe(container);
+            });
         }
 
-        function createResultBox(page, index) {
+        function createResultBox(page) {
             const box = document.createElement('div');
             box.className = 'box';
             box.innerHTML = `
@@ -180,16 +229,16 @@
                 <div class="page-type">
                     <p class="font-semibold mb-2">Page Type:</p>
                     <label class="inline-flex items-center mr-4">
-                        <input type="radio" class="form-radio" name="pageType${index}" value="custom" data-index="${index}" ${page.page_type === 'custom' ? 'checked' : ''}>
+                        <input type="radio" class="form-radio" name="pageType${crawlData.indexOf(page)}" value="custom" data-url="${page.url}" ${page.page_type === 'custom' ? 'checked' : ''}>
                         <span class="ml-2">Custom</span>
                     </label>
                     <label class="inline-flex items-center mr-4">
-                        <input type="radio" class="form-radio" name="pageType${index}" value="cms" data-index="${index}" ${page.page_type === 'cms' || !page.page_type ? 'checked' : ''}>
+                        <input type="radio" class="form-radio" name="pageType${crawlData.indexOf(page)}" value="cms" data-url="${page.url}" ${page.page_type === 'cms' || !page.page_type ? 'checked' : ''}>
                         <span class="ml-2">CMS</span>
                     </label>
                 </div>
                 <a href="${page.url}" target="_blank" class="visit-link">Visit Page</a>
-                <div class="copy-button" data-index="${index}">Copy All Data</div>
+                <div class="copy-button" data-url="${page.url}">Copy All Data</div>
             `;
             return box;
         }
@@ -223,46 +272,46 @@ Twitter Card Data:
             });
         }
 
-        function organizeResults() {
-            displayResults(crawlData, true);
-        }
-
         document.addEventListener('change', async (e) => {
             if (e.target.type === 'radio') {
-                const index = parseInt(e.target.dataset.index);
+                const url = e.target.dataset.url;
                 const value = e.target.value;
-                crawlData[index].page_type = value;
+                const page = crawlData.find(p => p.url === url);
+                if (page) {
+                    page.page_type = value;
 
-                try {
-                    const response = await fetch('/update-page-type', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            crawlId: crawlId,
-                            url: crawlData[index].url,
-                            pageType: value
-                        }),
-                    });
-                    const result = await response.json();
-                    if (!result.success) {
-                        console.error('Failed to update page type');
+                    try {
+                        const response = await fetch('/update-page-type', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                crawlId: crawlId,
+                                url: url,
+                                pageType: value
+                            }),
+                        });
+                        const result = await response.json();
+                        if (!result.success) {
+                            console.error('Failed to update page type');
+                        }
+                    } catch (error) {
+                        console.error('Error updating page type:', error);
                     }
-                } catch (error) {
-                    console.error('Error updating page type:', error);
                 }
             }
         });
 
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('copy-button')) {
-                const index = parseInt(e.target.dataset.index);
-                copyPageData(crawlData[index]);
+                const url = e.target.dataset.url;
+                const page = crawlData.find(p => p.url === url);
+                if (page) {
+                    copyPageData(page);
+                }
             }
         });
-
-        organizeButton.addEventListener('click', organizeResults);
 
         createNotionDatabaseBtn.addEventListener('click', async () => {
             try {
