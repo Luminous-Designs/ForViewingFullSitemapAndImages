@@ -62,6 +62,7 @@ function initDatabase() {
             twitter_image TEXT,
             screenshot_path TEXT,
             page_type TEXT DEFAULT 'cms',
+            tags TEXT,
             FOREIGN KEY (crawl_id) REFERENCES crawls (id)
           )`, (err) => {
             if (err) reject(err);
@@ -156,7 +157,8 @@ async function processUrl(url, index, total, crawlId, retries = 3) {
       return { 
         ...seoData, 
         screenshotPath: `/screenshots/${crawlId}/${filename}`,
-        page_type: 'cms'
+        page_type: 'cms',
+        tags: []
       };
     } catch (error) {
       console.error(`Error processing ${url} (attempt ${attempt}/${retries}):`, error.message);
@@ -166,7 +168,8 @@ async function processUrl(url, index, total, crawlId, retries = 3) {
           title: 'Error processing page',
           description: `Failed after ${retries} attempts: ${error.message}`,
           screenshotPath: `/screenshots/${crawlId}/${filename}`,
-          page_type: 'cms'
+          page_type: 'cms',
+          tags: []
         };
       }
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -208,14 +211,14 @@ app.post('/process-sitemap', async (req, res) => {
           crawl_id, url, title, description, keywords, h1, canonical_url,
           og_title, og_description, og_image,
           twitter_card, twitter_title, twitter_description, twitter_image,
-          screenshot_path, page_type
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          screenshot_path, page_type, tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           crawlId, result.url, result.title, result.description, result.keywords,
           result.h1, result.canonicalUrl, result.ogTitle, result.ogDescription,
           result.ogImage, result.twitterCard, result.twitterTitle,
           result.twitterDescription, result.twitterImage, result.screenshotPath,
-          result.page_type
+          result.page_type, JSON.stringify(result.tags)
         ],
         (err) => {
           if (err) reject(err);
@@ -258,6 +261,9 @@ app.get('/results/:crawlId', async (req, res) => {
     } else if (rows.length === 0) {
       res.status(404).json({ error: 'Crawl results not found' });
     } else {
+      rows.forEach(row => {
+        row.tags = JSON.parse(row.tags || '[]');
+      });
       res.json(rows);
     }
     db.close();
@@ -269,6 +275,20 @@ app.post('/update-page-type', async (req, res) => {
   const db = await initDatabase();
 
   db.run('UPDATE pages SET page_type = ? WHERE crawl_id = ? AND url = ?', [pageType, crawlId, url], (err) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json({ success: true });
+    }
+    db.close();
+  });
+});
+
+app.post('/update-page-tags', async (req, res) => {
+  const { crawlId, url, tags } = req.body;
+  const db = await initDatabase();
+
+  db.run('UPDATE pages SET tags = ? WHERE crawl_id = ? AND url = ?', [JSON.stringify(tags), crawlId, url], (err) => {
     if (err) {
       res.status(500).json({ error: 'Database error' });
     } else {
@@ -355,11 +375,13 @@ app.post('/create-notion-database', async (req, res) => {
         'Twitter Image': { url: {} },
         'Page Type': { select: { options: [{ name: 'Custom' }, { name: 'CMS' }] } },
         'Screenshot': { files: {} },
+        'Tags': { multi_select: {} },
       },
     });
 
     for (const page of pagesData) {
       const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
+      const tags = JSON.parse(page.tags || '[]');
 
       await notion.pages.create({
         parent: { database_id: response.id },
@@ -379,6 +401,7 @@ app.post('/create-notion-database', async (req, res) => {
           'Twitter Image': { url: page.twitter_image || null },
           'Page Type': { select: { name: page.page_type === 'custom' ? 'Custom' : 'CMS' } },
           'Screenshot': { files: [{ type: 'external', name: 'Screenshot', external: { url: githubImageUrl } }] },
+          'Tags': { multi_select: tags.map(tag => ({ name: tag })) },
         },
       });
     }
@@ -436,6 +459,7 @@ app.post('/send-to-trello', async (req, res) => {
 
         for (const page of pagesData) {
             const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
+            const tags = JSON.parse(page.tags || '[]');
 
             const cardResponse = await fetch(`https://api.trello.com/1/cards?idList=${listId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
                 method: 'POST',
@@ -458,12 +482,20 @@ Twitter Title: ${page.twitter_title || ''}
 Twitter Description: ${page.twitter_description || ''}
 Twitter Image: ${page.twitter_image || ''}
 Page Type: ${page.page_type === 'custom' ? 'Custom' : 'CMS'}
+Tags: ${tags.join(', ')}
                     `,
                     urlSource: githubImageUrl
                 })
             });
 
-            await cardResponse.json();
+            const cardData = await cardResponse.json();
+
+            // Add labels for each tag
+            for (const tag of tags) {
+                await fetch(`https://api.trello.com/1/cards/${cardData.id}/labels?color=null&name=${encodeURIComponent(tag)}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                    method: 'POST'
+                });
+            }
         }
 
         res.json({ success: true, boardUrl: boardData.url });

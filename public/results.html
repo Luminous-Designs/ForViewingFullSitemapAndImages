@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sitemap Processing Results</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
         .grid {
             display: grid;
@@ -78,27 +79,45 @@
         .group-container {
             margin-bottom: 2rem;
         }
+        .tag-dropdown {
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+        .accordion-content {
+            display: none;
+        }
+        .accordion-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-8">
     <div class="max-w-full mx-auto">
         <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
-        <div class="mb-4 flex justify-between items-center">
-            <button id="createNotionDatabaseBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+        <div class="mb-4 flex flex-wrap justify-between items-center">
+            <button id="createNotionDatabaseBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mb-2">
                 Create Notion Database
             </button>
-            <button id="sendToTrelloBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ml-4">
+            <button id="sendToTrelloBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-2 ml-2">
                 Send to Trello
             </button>
-            <button id="exportJsonBtn" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded ml-4">
+            <button id="exportJsonBtn" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded mb-2 ml-2">
                 Export Data to JSON
             </button>
+            <div class="w-full md:w-auto mt-2 md:mt-0">
+                <label for="tagFilter" class="block text-sm font-medium text-gray-700">Filter by Tag:</label>
+                <select id="tagFilter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">All Tags</option>
+                </select>
+            </div>
         </div>
         <div id="results" class="mb-8"></div>
     </div>
 
     <div id="sidebar"></div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         let crawlData = [];
         const crawlId = new URLSearchParams(window.location.search).get('crawlId');
@@ -107,6 +126,8 @@
         const sendToTrelloBtn = document.getElementById('sendToTrelloBtn');
         const exportJsonBtn = document.getElementById('exportJsonBtn');
         const sidebar = document.getElementById('sidebar');
+        const tagFilter = document.getElementById('tagFilter');
+        let allTags = new Set();
 
         async function loadResults() {
             let response;
@@ -120,8 +141,13 @@
                 if (!page.page_type) {
                     page.page_type = 'cms';
                 }
+                if (!page.tags) {
+                    page.tags = [];
+                }
+                page.tags.forEach(tag => allTags.add(tag));
             });
             displayResults(crawlData);
+            updateTagFilter();
         }
 
         function getUrlSlug(url) {
@@ -196,6 +222,15 @@
             document.querySelectorAll('.group-container').forEach(container => {
                 observer.observe(container);
             });
+
+            // Initialize Select2 for tag dropdowns
+            $('.tag-dropdown').select2({
+                tags: true,
+                tokenSeparators: [',', ' '],
+                placeholder: 'Add tags...',
+                allowClear: true,
+                data: Array.from(allTags).map(tag => ({ id: tag, text: tag }))
+            });
         }
 
         function createResultBox(page) {
@@ -205,26 +240,36 @@
                 <img src="${page.screenshot_path}" alt="${page.title}" loading="lazy">
                 <div class="content-container">
                     <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
-                    <div class="space-y-2 text-sm text-gray-600">
-                        <p><span class="font-semibold">URL:</span> ${page.url}</p>
-                        <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
-                        <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
-                        <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
-                        <p><span class="font-semibold">Canonical URL:</span> ${page.canonical_url || 'N/A'}</p>
-                        <details>
-                            <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
-                            <p><span class="font-semibold">Title:</span> ${page.og_title || 'N/A'}</p>
-                            <p><span class="font-semibold">Description:</span> ${page.og_description || 'N/A'}</p>
-                            <p><span class="font-semibold">Image:</span> ${page.og_image || 'N/A'}</p>
-                        </details>
-                        <details>
-                            <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
-                            <p><span class="font-semibold">Card:</span> ${page.twitter_card || 'N/A'}</p>
-                            <p><span class="font-semibold">Title:</span> ${page.twitter_title || 'N/A'}</p>
-                            <p><span class="font-semibold">Description:</span> ${page.twitter_description || 'N/A'}</p>
-                            <p><span class="font-semibold">Image:</span> ${page.twitter_image || 'N/A'}</p>
-                        </details>
+                    <p><span class="font-semibold">URL:</span> ${page.url}</p>
+                    <div class="accordion">
+                        <button class="accordion-toggle bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded w-full text-left mt-2">
+                            Toggle Details
+                        </button>
+                        <div class="accordion-content">
+                            <div class="space-y-2 text-sm text-gray-600 mt-2">
+                                <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
+                                <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
+                                <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
+                                <p><span class="font-semibold">Canonical URL:</span> ${page.canonical_url || 'N/A'}</p>
+                                <details>
+                                    <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
+                                    <p><span class="font-semibold">Title:</span> ${page.og_title || 'N/A'}</p>
+                                    <p><span class="font-semibold">Description:</span> ${page.og_description || 'N/A'}</p>
+                                    <p><span class="font-semibold">Image:</span> ${page.og_image || 'N/A'}</p>
+                                </details>
+                                <details>
+                                    <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
+                                    <p><span class="font-semibold">Card:</span> ${page.twitter_card || 'N/A'}</p>
+                                    <p><span class="font-semibold">Title:</span> ${page.twitter_title || 'N/A'}</p>
+                                    <p><span class="font-semibold">Description:</span> ${page.twitter_description || 'N/A'}</p>
+                                    <p><span class="font-semibold">Image:</span> ${page.twitter_image || 'N/A'}</p>
+                                </details>
+                            </div>
+                        </div>
                     </div>
+                    <select class="tag-dropdown" multiple="multiple" data-url="${page.url}">
+                        ${page.tags.map(tag => `<option value="${tag}" selected>${tag}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="page-type">
                     <p class="font-semibold mb-2">Page Type:</p>
@@ -252,6 +297,7 @@ SEO Keywords: ${page.keywords || 'N/A'}
 H1: ${page.h1 || 'N/A'}
 Canonical URL: ${page.canonical_url || 'N/A'}
 Page Type: ${page.page_type}
+Tags: ${page.tags.join(', ') || 'N/A'}
 
 Open Graph Data:
 - Title: ${page.og_title || 'N/A'}
@@ -269,6 +315,16 @@ Twitter Card Data:
                 console.log("copied data");
             }).catch(err => {
                 console.error('Failed to copy text: ', err);
+            });
+        }
+
+        function updateTagFilter() {
+            tagFilter.innerHTML = '<option value="">All Tags</option>';
+            allTags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag;
+                option.textContent = tag;
+                tagFilter.appendChild(option);
             });
         }
 
@@ -303,6 +359,56 @@ Twitter Card Data:
             }
         });
 
+        $(document).on('select2:select select2:unselect', '.tag-dropdown', async function(e) {
+            const url = $(this).data('url');
+            const tags = $(this).val() || [];
+            const page = crawlData.find(p => p.url === url);
+            if (page) {
+                page.tags = tags;
+
+                try {
+                    const response = await fetch('/update-page-tags', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            crawlId: crawlId,
+                            url: url,
+                            tags: tags
+                        }),
+                    });
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to update page tags');
+                    } else {
+                        if (e.params && e.params.data) {
+                            const newTag = e.params.data.text;
+                            if (!allTags.has(newTag)) {
+                                allTags.add(newTag);
+                                updateTagFilter();
+                                $('.tag-dropdown').each(function() {
+                                    if (!$(this).find(`option[value="${newTag}"]`).length) {
+                                        $(this).append(new Option(newTag, newTag, false, false));
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error updating page tags:', error);
+                }
+            }
+        });
+
+        tagFilter.addEventListener('change', () => {
+            const selectedTag = tagFilter.value;
+            const filteredData = selectedTag 
+                ? crawlData.filter(page => page.tags.includes(selectedTag))
+                : crawlData;
+            displayResults(filteredData);
+        });
+
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('copy-button')) {
                 const url = e.target.dataset.url;
@@ -310,6 +416,9 @@ Twitter Card Data:
                 if (page) {
                     copyPageData(page);
                 }
+            } else if (e.target.classList.contains('accordion-toggle')) {
+                const content = e.target.nextElementSibling;
+                content.classList.toggle('active');
             }
         });
 
