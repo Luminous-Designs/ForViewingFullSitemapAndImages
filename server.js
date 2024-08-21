@@ -13,7 +13,6 @@ const sharp = require('sharp');
 const { Client } = require('@notionhq/client');
 require('dotenv').config();
 
-
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -66,7 +65,26 @@ function initDatabase() {
             FOREIGN KEY (crawl_id) REFERENCES crawls (id)
           )`, (err) => {
             if (err) reject(err);
-            else resolve(db);
+          });
+
+          // Add tags column if it doesn't exist
+          db.all(`PRAGMA table_info(pages)`, (err, rows) => {
+            if (err) {
+              reject(err);
+            } else {
+              const tagsColumnExists = rows.some(row => row.name === 'tags');
+              if (!tagsColumnExists) {
+                db.run(`ALTER TABLE pages ADD COLUMN tags TEXT`, (err) => {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve(db);
+                  }
+                });
+              } else {
+                resolve(db);
+              }
+            }
           });
         });
       }
@@ -262,7 +280,11 @@ app.get('/results/:crawlId', async (req, res) => {
       res.status(404).json({ error: 'Crawl results not found' });
     } else {
       rows.forEach(row => {
-        row.tags = JSON.parse(row.tags || '[]');
+        try {
+          row.tags = JSON.parse(row.tags || '[]');
+        } catch (e) {
+          row.tags = [];
+        }
       });
       res.json(rows);
     }
@@ -290,7 +312,8 @@ app.post('/update-page-tags', async (req, res) => {
 
   db.run('UPDATE pages SET tags = ? WHERE crawl_id = ? AND url = ?', [JSON.stringify(tags), crawlId, url], (err) => {
     if (err) {
-      res.status(500).json({ error: 'Database error' });
+      console.error('Database error:', err);
+      res.status(500).json({ success: false, error: 'Database error' });
     } else {
       res.json({ success: true });
     }

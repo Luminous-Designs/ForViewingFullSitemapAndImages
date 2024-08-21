@@ -1,0 +1,1140 @@
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/PUBLIC/INDEX.HTML CODE IS BELOW
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sitemap Processor</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-3xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processor</h1>
+        <form id="sitemapForm" class="mb-8">
+            <div class="flex items-center border-b border-b-2 border-blue-500 py-2">
+                <input type="text" id="sitemapUrl" placeholder="Enter sitemap URL" required
+                       class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none">
+                <button type="submit"
+                        class="flex-shrink-0 bg-blue-500 hover:bg-blue-700 border-blue-500 hover:border-blue-700 text-sm border-4 text-white py-1 px-2 rounded">
+                    Process Sitemap
+                </button>
+            </div>
+        </form>
+        <div id="progressContainer" class="mb-8 hidden">
+            <div class="relative pt-1">
+                <div class="flex mb-2 items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
+                            Progress
+                        </span>
+                    </div>
+                    <div class="text-right">
+                        <span id="progressPercentage" class="text-xs font-semibold inline-block text-blue-600">
+                            0%
+                        </span>
+                    </div>
+                </div>
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
+                    <div id="progressBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        <div id="result" class="mb-8 text-center"></div>
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Previous Crawls</h2>
+        <div id="previousCrawls" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+        <div class="mt-8 text-center">
+            <button id="clearDatabaseBtn" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+                Clear Database
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('sitemapForm');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const result = document.getElementById('result');
+        const previousCrawls = document.getElementById('previousCrawls');
+        const clearDatabaseBtn = document.getElementById('clearDatabaseBtn');
+
+        let ws;
+
+        async function loadPreviousCrawls() {
+            const response = await fetch('/previous-crawls');
+            const crawls = await response.json();
+            previousCrawls.innerHTML = '';
+            crawls.forEach(crawl => {
+                const crawlElement = document.createElement('div');
+                crawlElement.className = 'bg-white rounded-lg shadow-md p-4 cursor-pointer hover:shadow-lg transition-shadow duration-300';
+                crawlElement.innerHTML = `
+                    <h3 class="text-lg font-semibold mb-2">${new URL(crawl.url).hostname}</h3>
+                    <p class="text-sm text-gray-600">${new Date(crawl.date).toLocaleString()}</p>
+                `;
+                crawlElement.addEventListener('click', () => {
+                    window.location.href = `/results.html?crawlId=${crawl.id}`;
+                });
+                previousCrawls.appendChild(crawlElement);
+            });
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const sitemapUrl = document.getElementById('sitemapUrl').value;
+
+            progressContainer.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            progressPercentage.textContent = '0%';
+            result.innerHTML = '';
+
+            const response = await fetch('/process-sitemap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sitemapUrl })
+            });
+            const { crawlId } = await response.json();
+
+            ws = new WebSocket(`ws://${window.location.host}`);
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'progress') {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressPercentage.textContent = `${data.progress}%`;
+                } else if (data.type === 'complete') {
+                    result.innerHTML = `<a href="${data.resultsUrl}" class="text-blue-600 hover:text-blue-800">View Results</a>`;
+                    ws.close();
+                    loadPreviousCrawls();
+                }
+            };
+        });
+
+        clearDatabaseBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear the entire database? This action cannot be undone.')) {
+                const response = await fetch('/clear-database', { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Database cleared successfully.');
+                    loadPreviousCrawls();
+                } else {
+                    alert('Failed to clear database. Please try again.');
+                }
+            }
+        });
+
+        loadPreviousCrawls();
+    </script>
+</body>
+</html>
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/PUBLIC/RESULTS.HTML CODE IS BELOW
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sitemap Processing Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .box {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .box img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            max-height: 600px;
+        }
+        .content-container {
+            padding: 1rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .page-type {
+            padding: 0.5rem 1rem;
+            background-color: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+        .visit-link, .copy-button {
+            padding: 0.5rem;
+            text-align: center;
+            background-color: #4a5568;
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .visit-link:hover, .copy-button:hover {
+            background-color: #2d3748;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #4a5568;
+        }
+        .divider {
+            margin: 2rem 0;
+            border-top: 2px solid #e2e8f0;
+        }
+        #sidebar {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            z-index: 1000;
+        }
+        .nav-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #4a5568;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .nav-dot.active {
+            background-color: #2d3748;
+        }
+        .group-container {
+            margin-bottom: 2rem;
+        }
+        .tag-dropdown {
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+        .accordion-content {
+            display: none;
+        }
+        .accordion-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-full mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">Sitemap Processing Results</h1>
+        <div class="mb-4 flex flex-wrap justify-between items-center">
+            <button id="createNotionDatabaseBtn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mb-2">
+                Create Notion Database
+            </button>
+            <button id="sendToTrelloBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-2 ml-2">
+                Send to Trello
+            </button>
+            <button id="exportJsonBtn" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded mb-2 ml-2">
+                Export Data to JSON
+            </button>
+            <div class="w-full md:w-auto mt-2 md:mt-0">
+                <label for="tagFilter" class="block text-sm font-medium text-gray-700">Filter by Tag:</label>
+                <select id="tagFilter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                    <option value="">All Tags</option>
+                </select>
+            </div>
+        </div>
+        <div id="results" class="mb-8"></div>
+    </div>
+
+    <div id="sidebar"></div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        let crawlData = [];
+        const crawlId = new URLSearchParams(window.location.search).get('crawlId');
+        const resultsContainer = document.getElementById('results');
+        const createNotionDatabaseBtn = document.getElementById('createNotionDatabaseBtn');
+        const sendToTrelloBtn = document.getElementById('sendToTrelloBtn');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
+        const sidebar = document.getElementById('sidebar');
+        const tagFilter = document.getElementById('tagFilter');
+        let allTags = new Set();
+
+        async function loadResults() {
+            let response;
+            if (crawlId) {
+                response = await fetch(`/results/${crawlId}`);
+            } else {
+                response = await fetch('/results.json');
+            }
+            crawlData = await response.json();
+            crawlData.forEach(page => {
+                if (!page.page_type) {
+                    page.page_type = 'cms';
+                }
+                if (!page.tags) {
+                    page.tags = [];
+                }
+                page.tags.forEach(tag => allTags.add(tag));
+            });
+            displayResults(crawlData);
+            updateTagFilter();
+        }
+
+        function getUrlSlug(url) {
+            const parsedUrl = new URL(url);
+            const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
+            if (pathSegments.length === 0 || (pathSegments.length === 1 && pathSegments[0].includes('.'))) {
+                return 'root';
+            }
+            return pathSegments[0];
+        }
+
+        function displayResults(data) {
+            resultsContainer.innerHTML = '';
+            sidebar.innerHTML = '';
+
+            const groupedPages = data.reduce((acc, page) => {
+                const slug = getUrlSlug(page.url);
+                if (!acc[slug]) {
+                    acc[slug] = [];
+                }
+                acc[slug].push(page);
+                return acc;
+            }, {});
+
+            const sortedSlugs = Object.keys(groupedPages).sort((a, b) => {
+                if (a === 'root') return -1;
+                if (b === 'root') return 1;
+                return a.localeCompare(b);
+            });
+
+            sortedSlugs.forEach((slug, index) => {
+                const groupContainer = document.createElement('div');
+                groupContainer.className = 'group-container';
+                groupContainer.id = `group-${slug}`;
+
+                const groupTitle = document.createElement('h2');
+                groupTitle.className = 'section-title';
+                groupTitle.textContent = slug === 'root' ? 'Root Pages' : `/${slug}`;
+                groupContainer.appendChild(groupTitle);
+
+                const grid = document.createElement('div');
+                grid.className = 'grid';
+                groupedPages[slug].forEach(page => {
+                    grid.appendChild(createResultBox(page));
+                });
+                groupContainer.appendChild(grid);
+
+                resultsContainer.appendChild(groupContainer);
+
+                // Create navigation dot
+                const navDot = document.createElement('div');
+                navDot.className = 'nav-dot';
+                navDot.title = slug === 'root' ? 'Root Pages' : `/${slug}`;
+                navDot.addEventListener('click', () => {
+                    document.getElementById(`group-${slug}`).scrollIntoView({ behavior: 'smooth' });
+                });
+                sidebar.appendChild(navDot);
+            });
+
+            // Set up intersection observer for navigation dots
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const slug = entry.target.id.replace('group-', '');
+                        document.querySelectorAll('.nav-dot').forEach((dot, index) => {
+                            dot.classList.toggle('active', index === sortedSlugs.indexOf(slug));
+                        });
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            document.querySelectorAll('.group-container').forEach(container => {
+                observer.observe(container);
+            });
+
+            // Initialize Select2 for tag dropdowns
+            $('.tag-dropdown').select2({
+                tags: true,
+                tokenSeparators: [',', ' '],
+                placeholder: 'Add tags...',
+                allowClear: true,
+                data: Array.from(allTags).map(tag => ({ id: tag, text: tag }))
+            });
+        }
+
+        function createResultBox(page) {
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.innerHTML = `
+                <img src="${page.screenshot_path}" alt="${page.title}" loading="lazy">
+                <div class="content-container">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-2">${page.title}</h2>
+                    <p><span class="font-semibold">URL:</span> ${page.url}</p>
+                    <div class="accordion">
+                        <button class="accordion-toggle bg-gray-200 hover:bg-gray-300 py-2 px-4 rounded w-full text-left mt-2">
+                            Toggle Details
+                        </button>
+                        <div class="accordion-content">
+                            <div class="space-y-2 text-sm text-gray-600 mt-2">
+                                <p><span class="font-semibold">Description:</span> ${page.description || 'N/A'}</p>
+                                <p><span class="font-semibold">Keywords:</span> ${page.keywords || 'N/A'}</p>
+                                <p><span class="font-semibold">H1:</span> ${page.h1 || 'N/A'}</p>
+                                <p><span class="font-semibold">Canonical URL:</span> ${page.canonical_url || 'N/A'}</p>
+                                <details>
+                                    <summary class="font-semibold cursor-pointer">Open Graph Data</summary>
+                                    <p><span class="font-semibold">Title:</span> ${page.og_title || 'N/A'}</p>
+                                    <p><span class="font-semibold">Description:</span> ${page.og_description || 'N/A'}</p>
+                                    <p><span class="font-semibold">Image:</span> ${page.og_image || 'N/A'}</p>
+                                </details>
+                                <details>
+                                    <summary class="font-semibold cursor-pointer">Twitter Card Data</summary>
+                                    <p><span class="font-semibold">Card:</span> ${page.twitter_card || 'N/A'}</p>
+                                    <p><span class="font-semibold">Title:</span> ${page.twitter_title || 'N/A'}</p>
+                                    <p><span class="font-semibold">Description:</span> ${page.twitter_description || 'N/A'}</p>
+                                    <p><span class="font-semibold">Image:</span> ${page.twitter_image || 'N/A'}</p>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                    <select class="tag-dropdown" multiple="multiple" data-url="${page.url}">
+                        ${page.tags.map(tag => `<option value="${tag}" selected>${tag}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="page-type">
+                    <p class="font-semibold mb-2">Page Type:</p>
+                    <label class="inline-flex items-center mr-4">
+                        <input type="radio" class="form-radio" name="pageType${crawlData.indexOf(page)}" value="custom" data-url="${page.url}" ${page.page_type === 'custom' ? 'checked' : ''}>
+                        <span class="ml-2">Custom</span>
+                    </label>
+                    <label class="inline-flex items-center mr-4">
+                        <input type="radio" class="form-radio" name="pageType${crawlData.indexOf(page)}" value="cms" data-url="${page.url}" ${page.page_type === 'cms' || !page.page_type ? 'checked' : ''}>
+                        <span class="ml-2">CMS</span>
+                    </label>
+                </div>
+                <a href="${page.url}" target="_blank" class="visit-link">Visit Page</a>
+                <div class="copy-button" data-url="${page.url}">Copy All Data</div>
+            `;
+            return box;
+        }
+
+        function copyPageData(page) {
+            const formattedData = `
+Page Name: ${page.title}
+Page URL: ${page.url}
+SEO Description: ${page.description || 'N/A'}
+SEO Keywords: ${page.keywords || 'N/A'}
+H1: ${page.h1 || 'N/A'}
+Canonical URL: ${page.canonical_url || 'N/A'}
+Page Type: ${page.page_type}
+Tags: ${page.tags.join(', ') || 'N/A'}
+
+Open Graph Data:
+- Title: ${page.og_title || 'N/A'}
+- Description: ${page.og_description || 'N/A'}
+- Image: ${page.og_image || 'N/A'}
+
+Twitter Card Data:
+- Card: ${page.twitter_card || 'N/A'}
+- Title: ${page.twitter_title || 'N/A'}
+- Description: ${page.twitter_description || 'N/A'}
+- Image: ${page.twitter_image || 'N/A'}
+            `.trim();
+
+            navigator.clipboard.writeText(formattedData).then(() => {
+                console.log("copied data");
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+
+        function updateTagFilter() {
+            tagFilter.innerHTML = '<option value="">All Tags</option>';
+            allTags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag;
+                option.textContent = tag;
+                tagFilter.appendChild(option);
+            });
+        }
+
+        document.addEventListener('change', async (e) => {
+            if (e.target.type === 'radio') {
+                const url = e.target.dataset.url;
+                const value = e.target.value;
+                const page = crawlData.find(p => p.url === url);
+                if (page) {
+                    page.page_type = value;
+
+                    try {
+                        const response = await fetch('/update-page-type', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                crawlId: crawlId,
+                                url: url,
+                                pageType: value
+                            }),
+                        });
+                        const result = await response.json();
+                        if (!result.success) {
+                            console.error('Failed to update page type');
+                        }
+                    } catch (error) {
+                        console.error('Error updating page type:', error);
+                    }
+                }
+            }
+        });
+
+        $(document).on('select2:select select2:unselect', '.tag-dropdown', async function(e) {
+            const url = $(this).data('url');
+            const tags = $(this).val() || [];
+            const page = crawlData.find(p => p.url === url);
+            if (page) {
+                page.tags = tags;
+
+                try {
+                    const response = await fetch('/update-page-tags', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            crawlId: crawlId,
+                            url: url,
+                            tags: tags
+                        }),
+                    });
+                    const result = await response.json();
+                    if (!result.success) {
+                        console.error('Failed to update page tags');
+                    } else {
+                        if (e.params && e.params.data) {
+                            const newTag = e.params.data.text;
+                            if (!allTags.has(newTag)) {
+                                allTags.add(newTag);
+                                updateTagFilter();
+                                $('.tag-dropdown').each(function() {
+                                    if (!$(this).find(`option[value="${newTag}"]`).length) {
+                                        $(this).append(new Option(newTag, newTag, false, false));
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error updating page tags:', error);
+                }
+            }
+        });
+
+        tagFilter.addEventListener('change', () => {
+            const selectedTag = tagFilter.value;
+            const filteredData = selectedTag 
+                ? crawlData.filter(page => page.tags.includes(selectedTag))
+                : crawlData;
+            displayResults(filteredData);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('copy-button')) {
+                const url = e.target.dataset.url;
+                const page = crawlData.find(p => p.url === url);
+                if (page) {
+                    copyPageData(page);
+                }
+            } else if (e.target.classList.contains('accordion-toggle')) {
+                const content = e.target.nextElementSibling;
+                content.classList.toggle('active');
+            }
+        });
+
+        createNotionDatabaseBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/create-notion-database', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ crawlId: crawlId }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Notion database created successfully!');
+                } else {
+                    alert('Failed to create Notion database. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error creating Notion database:', error);
+                alert('An error occurred while creating the Notion database.');
+            }
+        });
+
+        sendToTrelloBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/send-to-trello', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ crawlId: crawlId }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Data sent to Trello successfully!');
+                } else {
+                    alert('Failed to send data to Trello. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error sending data to Trello:', error);
+                alert('An error occurred while sending data to Trello.');
+            }
+        });
+
+        exportJsonBtn.addEventListener('click', () => {
+            const dataStr = JSON.stringify(crawlData, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `sitemap_crawl_${crawlId || 'data'}.json`;
+
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        });
+
+        loadResults();
+    </script>
+</body>
+</html>
+
+/USERS/ROMINMIRMOTAHARI/DOCUMENTS/GITHUB/FORVIEWINGFULLSITEMAPANDIMAGES/SERVER.JS CODE IS BELOW
+const axios = require('axios');
+const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
+const fs = require('fs').promises;
+const fsSync = require('fs');
+const path = require('path');
+const xml2js = require('xml2js');
+const express = require('express');
+const WebSocket = require('ws');
+const crypto = require('crypto');
+const sqlite3 = require('sqlite3').verbose();
+const sharp = require('sharp');
+const { Client } = require('@notionhq/client');
+require('dotenv').config();
+
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(express.static('public'));
+app.use(express.json());
+
+const wss = new WebSocket.Server({ noServer: true });
+
+// Initialize Notion client
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
+
+function generateSafeFilename(url) {
+  return crypto.createHash('md5').update(url).digest('hex') + '.jpg';
+}
+
+function initDatabase() {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database('./sitemap_results.db', (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        db.serialize(() => {
+          db.run(`CREATE TABLE IF NOT EXISTS crawls (
+            id TEXT PRIMARY KEY,
+            url TEXT,
+            date TEXT
+          )`, (err) => {
+            if (err) reject(err);
+          });
+
+          db.run(`CREATE TABLE IF NOT EXISTS pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            crawl_id TEXT,
+            url TEXT,
+            title TEXT,
+            description TEXT,
+            keywords TEXT,
+            h1 TEXT,
+            canonical_url TEXT,
+            og_title TEXT,
+            og_description TEXT,
+            og_image TEXT,
+            twitter_card TEXT,
+            twitter_title TEXT,
+            twitter_description TEXT,
+            twitter_image TEXT,
+            screenshot_path TEXT,
+            page_type TEXT DEFAULT 'cms',
+            tags TEXT,
+            FOREIGN KEY (crawl_id) REFERENCES crawls (id)
+          )`, (err) => {
+            if (err) reject(err);
+            else resolve(db);
+          });
+        });
+      }
+    });
+  });
+}
+
+async function parseSitemap(sitemapUrl) {
+  console.log(`Parsing sitemap: ${sitemapUrl}`);
+  const response = await axios.get(sitemapUrl);
+  const parser = new xml2js.Parser();
+  const result = await parser.parseStringPromise(response.data);
+  console.log(`Sitemap parsed. Found ${result.urlset.url.length} URLs.`);
+  return result.urlset.url.map(url => url.loc[0]);
+}
+
+async function captureScreenshot(url, outputPath) {
+  console.log(`Capturing screenshot for: ${url}`);
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 1600, height: 900 });
+    await page.goto(url, { 
+      waitUntil: 'networkidle0',
+      timeout: 60000 // Increase timeout to 60 seconds
+    });
+    const screenshot = await page.screenshot({ fullPage: true });
+    await sharp(screenshot)
+      .resize({ width: 600 })
+      .jpeg({ quality: 80 })
+      .toFile(outputPath);
+    console.log(`Screenshot captured and optimized for: ${url}`);
+  } catch (error) {
+    console.error(`Error capturing screenshot for ${url}:`, error.message);
+    // Create a simple error image
+    await page.setContent(`<html><body><h1>Error loading page</h1><p>${error.message}</p></body></html>`);
+    const errorScreenshot = await page.screenshot();
+    await sharp(errorScreenshot)
+      .resize({ width: 600 })
+      .jpeg({ quality: 80 })
+      .toFile(outputPath);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function extractSEOData(url) {
+  console.log(`Extracting SEO data for: ${url}`);
+  try {
+    const response = await axios.get(url, { timeout: 30000 });
+    const $ = cheerio.load(response.data);
+    
+    const seoData = {
+      url: url,
+      title: $('title').text(),
+      description: $('meta[name="description"]').attr('content'),
+      keywords: $('meta[name="keywords"]').attr('content'),
+      h1: $('h1').first().text(),
+      canonicalUrl: $('link[rel="canonical"]').attr('href'),
+      ogTitle: $('meta[property="og:title"]').attr('content'),
+      ogDescription: $('meta[property="og:description"]').attr('content'),
+      ogImage: $('meta[property="og:image"]').attr('content'),
+      twitterCard: $('meta[name="twitter:card"]').attr('content'),
+      twitterTitle: $('meta[name="twitter:title"]').attr('content'),
+      twitterDescription: $('meta[name="twitter:description"]').attr('content'),
+      twitterImage: $('meta[name="twitter:image"]').attr('content'),
+    };
+
+    console.log(`SEO data extracted for: ${url}`);
+    return seoData;
+  } catch (error) {
+    console.error(`Error extracting SEO data for ${url}:`, error.message);
+    return {
+      url: url,
+      title: 'Error extracting SEO data',
+      description: error.message
+    };
+  }
+}
+
+async function processUrl(url, index, total, crawlId, retries = 3) {
+  const filename = generateSafeFilename(url);
+  const screenshotPath = path.join(__dirname, 'public', 'screenshots', crawlId, filename);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await captureScreenshot(url, screenshotPath);
+      const seoData = await extractSEOData(url);
+      return { 
+        ...seoData, 
+        screenshotPath: `/screenshots/${crawlId}/${filename}`,
+        page_type: 'cms',
+        tags: []
+      };
+    } catch (error) {
+      console.error(`Error processing ${url} (attempt ${attempt}/${retries}):`, error.message);
+      if (attempt === retries) {
+        return {
+          url,
+          title: 'Error processing page',
+          description: `Failed after ${retries} attempts: ${error.message}`,
+          screenshotPath: `/screenshots/${crawlId}/${filename}`,
+          page_type: 'cms',
+          tags: []
+        };
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+}
+
+app.post('/process-sitemap', async (req, res) => {
+  const { sitemapUrl, concurrency = 5 } = req.body;
+  const crawlId = Date.now().toString();
+  res.json({ message: 'Processing started', crawlId });
+
+  const urls = await parseSitemap(sitemapUrl);
+  const results = [];
+
+  const screenshotsDir = path.join(__dirname, 'public', 'screenshots', crawlId);
+  await fs.mkdir(screenshotsDir, { recursive: true });
+
+  const db = await initDatabase();
+
+  await new Promise((resolve, reject) => {
+    db.run('INSERT INTO crawls (id, url, date) VALUES (?, ?, ?)', [crawlId, sitemapUrl, new Date().toISOString()], (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  for (let i = 0; i < urls.length; i += concurrency) {
+    const batch = urls.slice(i, i + concurrency);
+    console.log(`Processing batch ${i / concurrency + 1} of ${Math.ceil(urls.length / concurrency)}`);
+    
+    const batchResults = await Promise.all(
+      batch.map(url => processUrl(url, i + batch.indexOf(url), urls.length, crawlId))
+    );
+
+    for (const result of batchResults) {
+      await new Promise((resolve, reject) => {
+        db.run(`INSERT INTO pages (
+          crawl_id, url, title, description, keywords, h1, canonical_url,
+          og_title, og_description, og_image,
+          twitter_card, twitter_title, twitter_description, twitter_image,
+          screenshot_path, page_type, tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crawlId, result.url, result.title, result.description, result.keywords,
+          result.h1, result.canonicalUrl, result.ogTitle, result.ogDescription,
+          result.ogImage, result.twitterCard, result.twitterTitle,
+          result.twitterDescription, result.twitterImage, result.screenshotPath,
+          result.page_type, JSON.stringify(result.tags)
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+
+    results.push(...batchResults);
+
+    const progress = Math.round(((i + batch.length) / urls.length) * 100);
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'progress', progress }));
+      }
+    });
+  }
+
+  console.log('All URLs processed.');
+
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'complete',
+        resultsUrl: `/results.html?crawlId=${crawlId}`
+      }));
+    }
+  });
+
+  db.close();
+});
+
+app.get('/results/:crawlId', async (req, res) => {
+  const crawlId = req.params.crawlId;
+  const db = await initDatabase();
+
+  db.all('SELECT * FROM pages WHERE crawl_id = ?', [crawlId], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else if (rows.length === 0) {
+      res.status(404).json({ error: 'Crawl results not found' });
+    } else {
+      rows.forEach(row => {
+        row.tags = JSON.parse(row.tags || '[]');
+      });
+      res.json(rows);
+    }
+    db.close();
+  });
+});
+
+app.post('/update-page-type', async (req, res) => {
+  const { crawlId, url, pageType } = req.body;
+  const db = await initDatabase();
+
+  db.run('UPDATE pages SET page_type = ? WHERE crawl_id = ? AND url = ?', [pageType, crawlId, url], (err) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json({ success: true });
+    }
+    db.close();
+  });
+});
+
+app.post('/update-page-tags', async (req, res) => {
+  const { crawlId, url, tags } = req.body;
+  const db = await initDatabase();
+
+  db.run('UPDATE pages SET tags = ? WHERE crawl_id = ? AND url = ?', [JSON.stringify(tags), crawlId, url], (err) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json({ success: true });
+    }
+    db.close();
+  });
+});
+
+app.get('/previous-crawls', async (req, res) => {
+  const db = await initDatabase();
+  db.all('SELECT * FROM crawls ORDER BY date DESC LIMIT 10', (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: 'Database error' });
+    } else {
+      res.json(rows);
+    }
+    db.close();
+  });
+});
+
+app.post('/clear-database', async (req, res) => {
+  const db = await initDatabase();
+  db.serialize(() => {
+    db.run('DELETE FROM pages');
+    db.run('DELETE FROM crawls');
+    db.run('VACUUM', (err) => {
+      if (err) {
+        res.status(500).json({ error: 'Database error' });
+      } else {
+        res.json({ success: true });
+      }
+      db.close();
+    });
+  });
+});
+
+app.post('/create-notion-database', async (req, res) => {
+  const { crawlId } = req.body;
+  const db = await initDatabase();
+
+  const githubUsername = 'Luminous-Designs';
+  const githubRepo = 'ForViewingFullSitemapAndImages';
+  const githubBranch = 'main';
+
+  try {
+    const crawlData = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM crawls WHERE id = ?', [crawlId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const pagesData = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM pages WHERE crawl_id = ?', [crawlId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    const response = await notion.databases.create({
+      parent: { type: 'page_id', page_id: process.env.NOTION_PARENT_PAGE_ID },
+      title: [
+        {
+          type: 'text',
+          text: {
+            content: `Website Crawl - ${new URL(crawlData.url).hostname} - ${new Date(crawlData.date).toLocaleString()}`,
+          },
+        },
+      ],
+      properties: {
+        'Page Name': { title: {} },
+        'URL': { url: {} },
+        'SEO Description': { rich_text: {} },
+        'SEO Keywords': { rich_text: {} },
+        'H1': { rich_text: {} },
+        'Canonical URL': { url: {} },
+        'OG Title': { rich_text: {} },
+        'OG Description': { rich_text: {} },
+        'OG Image': { url: {} },
+        'Twitter Card': { rich_text: {} },
+        'Twitter Title': { rich_text: {} },
+        'Twitter Description': { rich_text: {} },
+        'Twitter Image': { url: {} },
+        'Page Type': { select: { options: [{ name: 'Custom' }, { name: 'CMS' }] } },
+        'Screenshot': { files: {} },
+        'Tags': { multi_select: {} },
+      },
+    });
+
+    for (const page of pagesData) {
+      const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
+      const tags = JSON.parse(page.tags || '[]');
+
+      await notion.pages.create({
+        parent: { database_id: response.id },
+        properties: {
+          'Page Name': { title: [{ text: { content: page.title || 'Untitled' } }] },
+          'URL': { url: page.url },
+          'SEO Description': { rich_text: [{ text: { content: page.description || '' } }] },
+          'SEO Keywords': { rich_text: [{ text: { content: page.keywords || '' } }] },
+          'H1': { rich_text: [{ text: { content: page.h1 || '' } }] },
+          'Canonical URL': { url: page.canonical_url || null },
+          'OG Title': { rich_text: [{ text: { content: page.og_title || '' } }] },
+          'OG Description': { rich_text: [{ text: { content: page.og_description || '' } }] },
+          'OG Image': { url: page.og_image || null },
+          'Twitter Card': { rich_text: [{ text: { content: page.twitter_card || '' } }] },
+          'Twitter Title': { rich_text: [{ text: { content: page.twitter_title || '' } }] },
+          'Twitter Description': { rich_text: [{ text: { content: page.twitter_description || '' } }] },
+          'Twitter Image': { url: page.twitter_image || null },
+          'Page Type': { select: { name: page.page_type === 'custom' ? 'Custom' : 'CMS' } },
+          'Screenshot': { files: [{ type: 'external', name: 'Screenshot', external: { url: githubImageUrl } }] },
+          'Tags': { multi_select: tags.map(tag => ({ name: tag })) },
+        },
+      });
+    }
+
+    res.json({ success: true, databaseId: response.id });
+  } catch (error) {
+    console.error('Error creating Notion database:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    db.close();
+  }
+});
+
+const fetch = require('node-fetch').default;
+
+const TRELLO_API_KEY = process.env.TRELLO_API_KEY;
+const TRELLO_TOKEN = process.env.TRELLO_TOKEN;
+
+app.post('/send-to-trello', async (req, res) => {
+    const { crawlId } = req.body;
+    const db = await initDatabase();
+
+    const githubUsername = 'Luminous-Designs';
+    const githubRepo = 'ForViewingFullSitemapAndImages';
+    const githubBranch = 'main';
+
+    try {
+        const crawlData = await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM crawls WHERE id = ?', [crawlId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        const pagesData = await new Promise((resolve, reject) => {
+            db.all('SELECT * FROM pages WHERE crawl_id = ?', [crawlId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+
+        // Create a new board for this crawl
+        const boardResponse = await fetch(`https://api.trello.com/1/boards?name=Sitemap Crawl ${crawlId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+            method: 'POST'
+        });
+        const boardData = await boardResponse.json();
+        const boardId = boardData.id;
+
+        // Create a list in the new board
+        const listResponse = await fetch(`https://api.trello.com/1/lists?name=Pages&idBoard=${boardId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+            method: 'POST'
+        });
+        const listData = await listResponse.json();
+        const listId = listData.id;
+
+        for (const page of pagesData) {
+            const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
+            const tags = JSON.parse(page.tags || '[]');
+
+            const cardResponse = await fetch(`https://api.trello.com/1/cards?idList=${listId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: page.title || 'Untitled',
+                    desc: `
+URL: ${page.url}
+SEO Description: ${page.description || ''}
+SEO Keywords: ${page.keywords || ''}
+H1: ${page.h1 || ''}
+Canonical URL: ${page.canonical_url || ''}
+OG Title: ${page.og_title || ''}
+OG Description: ${page.og_description || ''}
+OG Image: ${page.og_image || ''}
+Twitter Card: ${page.twitter_card || ''}
+Twitter Title: ${page.twitter_title || ''}
+Twitter Description: ${page.twitter_description || ''}
+Twitter Image: ${page.twitter_image || ''}
+Page Type: ${page.page_type === 'custom' ? 'Custom' : 'CMS'}
+Tags: ${tags.join(', ')}
+                    `,
+                    urlSource: githubImageUrl
+                })
+            });
+
+            const cardData = await cardResponse.json();
+
+            // Add labels for each tag
+            for (const tag of tags) {
+                await fetch(`https://api.trello.com/1/cards/${cardData.id}/labels?color=null&name=${encodeURIComponent(tag)}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                    method: 'POST'
+                });
+            }
+        }
+
+        res.json({ success: true, boardUrl: boardData.url });
+    } catch (error) {
+        console.error('Error sending data to Trello:', error);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        db.close();
+    }
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/results', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'results.html'));
+});
+
+const server = app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});
+
+server.on('upgrade', (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, socket => {
+    wss.emit('connection', socket, request);
+  });
+});
