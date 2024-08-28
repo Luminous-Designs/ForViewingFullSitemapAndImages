@@ -473,25 +473,36 @@ app.post('/send-to-trello', async (req, res) => {
         const boardData = await boardResponse.json();
         const boardId = boardData.id;
 
-        // Create a list in the new board
-        const listResponse = await fetch(`https://api.trello.com/1/lists?name=Pages&idBoard=${boardId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+        // Create a list for untagged pages
+        const untaggedListResponse = await fetch(`https://api.trello.com/1/lists?name=Untagged Pages&idBoard=${boardId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
             method: 'POST'
         });
-        const listData = await listResponse.json();
-        const listId = listData.id;
+        const untaggedListData = await untaggedListResponse.json();
+        const untaggedListId = untaggedListData.id;
+
+        // Create lists for each unique tag
+        const allTags = new Set();
+        pagesData.forEach(page => {
+            const tags = JSON.parse(page.tags || '[]');
+            tags.forEach(tag => allTags.add(tag));
+        });
+
+        const tagLists = {};
+        for (const tag of allTags) {
+            const listResponse = await fetch(`https://api.trello.com/1/lists?name=${encodeURIComponent(tag)}&idBoard=${boardId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                method: 'POST'
+            });
+            const listData = await listResponse.json();
+            tagLists[tag] = listData.id;
+        }
 
         for (const page of pagesData) {
             const githubImageUrl = `https://raw.githubusercontent.com/${githubUsername}/${githubRepo}/${githubBranch}/public${page.screenshot_path}`;
             const tags = JSON.parse(page.tags || '[]');
 
-            const cardResponse = await fetch(`https://api.trello.com/1/cards?idList=${listId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    name: page.title || 'Untitled',
-                    desc: `
+            const cardData = {
+                name: page.title || 'Untitled',
+                desc: `
 URL: ${page.url}
 SEO Description: ${page.description || ''}
 SEO Keywords: ${page.keywords || ''}
@@ -506,18 +517,40 @@ Twitter Description: ${page.twitter_description || ''}
 Twitter Image: ${page.twitter_image || ''}
 Page Type: ${page.page_type === 'custom' ? 'Custom' : 'CMS'}
 Tags: ${tags.join(', ')}
-                    `,
-                    urlSource: githubImageUrl
-                })
-            });
+                `,
+                urlSource: githubImageUrl
+            };
 
-            const cardData = await cardResponse.json();
-
-            // Add labels for each tag
-            for (const tag of tags) {
-                await fetch(`https://api.trello.com/1/cards/${cardData.id}/labels?color=null&name=${encodeURIComponent(tag)}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
-                    method: 'POST'
+            if (tags.length === 0) {
+                // Add to untagged list
+                await fetch(`https://api.trello.com/1/cards?idList=${untaggedListId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(cardData)
                 });
+            } else {
+                // Add to each tag list
+                for (const tag of tags) {
+                    const listId = tagLists[tag];
+                    const cardResponse = await fetch(`https://api.trello.com/1/cards?idList=${listId}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(cardData)
+                    });
+
+                    const createdCard = await cardResponse.json();
+
+                    // Add labels for each tag
+                    for (const cardTag of tags) {
+                        await fetch(`https://api.trello.com/1/cards/${createdCard.id}/labels?color=null&name=${encodeURIComponent(cardTag)}&key=${TRELLO_API_KEY}&token=${TRELLO_TOKEN}`, {
+                            method: 'POST'
+                        });
+                    }
+                }
             }
         }
 
